@@ -123,3 +123,68 @@ def set_params(version_num):
         G_num = Gvec.subs(params_1)
         F_num = F.subs(params_1)
         
+        
+
+dt = 1e-3   # discretization step
+ns = 4      # number of states
+ni = 1      # number of inputs
+
+def dynamics(xx, uu):
+    # Discrete dynamics of gymnast
+    # Using Runge-Kutta 4th order
+    
+    xx = xx.squeeze()
+    uu = uu.squeeze()
+    
+    xx_next = np.zeros((ns,))
+    
+    # Runge-Kutta 4th order
+    k1 = continuous_dynamics(xx, uu)
+    k2 = continuous_dynamics(xx + (dt/2)*k1, uu)
+    k3 = continuous_dynamics(xx + (dt/2)*k2, uu)
+    k4 = continuous_dynamics(xx + dt*k3, uu)
+    
+    # x(t_0 + dt) = x(t_0) + (avg slope) * dt
+    xx_next = xx + dt * (k1+ 2*k2 + 2*k3 + k4) / 6.0
+    
+    return xx_next
+
+
+def continuous_dynamics(xx, uu):
+    # Continuous-dynamics of gymnast
+    
+    xx = xx.squeeze()
+    uu = uu.squeeze()
+    
+    xx_next = np.zeros((ns,))
+    
+    # Add state to matrices
+    M_c = M_num.subs({theta1: xx[0], theta2: xx[1]})
+    C_c = C_num.subs({theta1: xx[0], theta2: xx[1], theta1_dot: xx[2], theta2_dot: xx[3]})
+    G_c = G_num.subs({theta1: xx[0], theta2: xx[1]})
+    
+    theta1_dotdot, theta2_dotdot  = sp.symbols('theta1_dotdot theta2_dotdot')
+    
+    theta_dotdot = sp.Matrix([theta1_dotdot, theta2_dotdot])
+    
+    eq = sp.Eq( M_c @ theta_dotdot + C_c @ sp.Matrix([xx[2], xx[3]])+ F_num @ sp.Matrix([xx[2], xx[3]]) + G_c, sp.Matrix([0, uu[1]]))
+    
+    sol = sp.solve(eq, [theta1_dotdot, theta2_dotdot])
+    
+    xx_next[:,] = np.array([xx[2], xx[3], sol[theta1_dotdot], sol[theta2_dotdot]])
+    
+    # print(xx_next)
+    # print(xx_next.shape)
+    
+    return xx_next
+    
+    #formula
+    # M_calc = np.array(M_num.subs({theta1: xx[0], theta2: xx[1]}), dtype=float).squeeze()
+    # C_calc = np.array(C_num.subs({theta1: xx[0], theta2: xx[1], theta1_dot: xx[2], theta2_dot: xx[3]}), dtype=float).squeeze()
+    # G_calc = np.array(G_num.subs({theta1: xx[0], theta2: xx[1]}), dtype=float).squeeze()
+    # F_calc = np.array(F_num, dtype=float).squeeze()
+    
+    # output = M_calc @ xx[2:] + C_calc @ xx[2:] + F_calc @ xx[2:] + G_calc
+    
+    
+    

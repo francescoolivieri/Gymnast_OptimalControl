@@ -20,5 +20,13 @@ signal.signal(signal.SIGINT, signal.SIG_DFL)
 
 
 if __name__ == '__main__':
-    print("hello")
+    num_states = 4
+    num_inputs = 2
     
+    xx = np.zeros((num_states,))
+    uu = np.zeros((num_inputs,))
+    
+    xx[:] = np.array([1, 1, 1, 1])  
+    uu[:] = np.array([0, 1])        
+    
+    print(dyn.discrete_dynamics(xx, uu))
