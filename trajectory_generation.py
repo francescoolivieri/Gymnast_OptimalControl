@@ -3,6 +3,18 @@ import matplotlib.pyplot as plt
 from dynamics import *
 import sympy as sp
 
+T = 4.0 #Total time in secods
+N = int(T / dt) + 1 # Number of steps (including the initial state)
+nu = 2 #Dimension of control vector
+nx = 4 #Dimension of state vector
+N_opt = N * nx + (N-1) * nu #Total number of optimization values
+
+#   Cost Weights    # -> pq estes valores
+Q = np.diag([10.0, 10.0, 1.0, 1.0])
+R = np.diag([0.1, 0.1])
+Q_T = np.diag([1000.0, 1000.0, 100.0, 100.0])
+
+
 def define_two_equilibria(theta1_e, theta2_e):
     
     #Define the state
@@ -71,8 +83,6 @@ def define_reference_curve(T, x_e1, x_e2, u_e1, u_e2):
             
     return t_ref, x_ref, u_ref
 
-T = 4.0 #Total time in secods
-
 t_ref, x_ref, u_ref = define_reference_curve(T, x_e1, x_e2, u_e1, u_e2)
 
 print("x_ref[0]   =", x_ref[0])        # should be close to x_e1
@@ -99,3 +109,35 @@ plt.ylabel('Torque on joint 2 [Nm]')
 plt.title('Reference Torque')
 plt.grid(True)
 plt.show()
+
+def objective_function(Z, N, nx, nu, x_e2, u_e2, Q, Rm, Q_T):
+    
+    J = 0.0
+    
+    #running the cost
+    for t in range(N - 1):
+        x_start = t * (nx + nu)
+        u_start = x_start + nx
+        
+        x_t = Z[x_start : x_start + nx]
+        u_t = Z[u_start : u_start + nu]
+        
+        #L(x_t, u_t) -> confirmar se é x_e2 e u_e2
+        state_dev = x_t - x_e2
+        control_dev = u_t - u_e2
+        
+        #Stage_Cost
+        J += 0.5 * np.dot(state_dev, Q @ state_dev)
+        J += 0.5 * np.dot(control_dev, R @ control_dev)
+        
+    #Terminal Cost
+    x_T_start = (N - 1) * (nx + nu)
+    x_T = Z[x_T_start : x_T_start + nx]
+    
+    #Phi(x_T)
+    state_dev_T = x_T - x_e2
+    J += 0.5 * np.dot(state_dev_T, Q_T @ state_dev_T)
+    
+    return J
+
+
