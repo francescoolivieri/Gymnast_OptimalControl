@@ -122,6 +122,8 @@ def set_params(version_num):
         C_num = C.subs(params_1)
         G_num = Gvec.subs(params_1)
         F_num = F.subs(params_1)
+    
+    return M_num, C_num, G_num, F_num
         
         
 

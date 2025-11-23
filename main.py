@@ -29,4 +29,5 @@ if __name__ == '__main__':
     xx[:] = np.array([1, 1, 1, 1])  
     uu[:] = np.array([0, 1])        
     
-    print(dyn.discrete_dynamics(xx, uu))
+    #print(dyn.discrete_dynamics(xx, uu))
+    print(dyn.dynamics(xx, uu))
