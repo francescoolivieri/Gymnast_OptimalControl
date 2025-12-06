@@ -1,5 +1,6 @@
 import sympy as sp
 import numpy as np
+from sympy.utilities.lambdify import lambdify
 
 #   Symbols 
 I1, I2 = sp.symbols('I1 I2')
@@ -9,6 +10,7 @@ theta1, theta2 = sp.symbols('theta1 theta2')
 theta1_dot, theta2_dot = sp.symbols('theta1_dot theta2_dot')
 g = sp.symbols('g')
 f1, f2 = sp.symbols('f1 f2')
+tau1, tau2 = sp.symbols('tau1 tau2') # Define input symbols for Jacobian calculation
 
 params_1 = {
     m1: 1.0,
@@ -41,7 +43,6 @@ params_2 = {
     f1: 1.0,
     f2: 1.0
 }
-
 
 params_3 = {
     m1: 1.5,
@@ -95,6 +96,23 @@ C_num = C.subs(params_1)
 G_num = Gvec.subs(params_1)
 F_num = F.subs(params_1)
 
+q_syms = [theta1, theta2]
+qdot_syms = [theta1_dot, theta2_dot]
+all_syms = q_syms + qdot_syms
+u_syms = [sp.symbols('tau1'), sp.symbols('tau2')]
+x_syms = q_syms + qdot_syms
+
+tau_vec = sp.Matrix(u_syms)
+qdot_vec = sp.Matrix(qdot_syms)
+
+# ddq = M^{-1} * (tau - (C+F) qdot - G)
+RHS_expr = tau_vec - (C_num @ qdot_vec + F_num @ qdot_vec + G_num)
+qddot_expr = M.inv() @ RHS_expr
+f_expr = sp.Matrix(qdot_syms + list(qddot_expr))   # [qdot; qddot]
+M_func = lambdify(q_syms, M_num, 'numpy')
+RHS_func = lambdify(all_syms + u_syms, RHS_expr, 'numpy')
+A_expr = f_expr.jacobian(x_syms)
+B_expr = f_expr.jacobian(u_syms)
 
 def set_params(version_num):
     # Set the parameters to one of the predefined set
@@ -125,11 +143,36 @@ def set_params(version_num):
     
     return M_num, C_num, G_num, F_num
         
-        
+##  Task 2 Set up   ##
+M_sym, C_sym, G_sym, F_sym = set_params(1) #Assuming 1st config
 
-dt = 1e-3   # discretization step
+q_vec = sp.Matrix([theta1, theta2])
+qdot_vec = sp.Matrix([theta1_dot, theta2_dot])
+x_vec = sp.Matrix([theta1, theta2, theta1_dot, theta2_dot])
+u_vec = sp.Matrix([tau1, tau2])  # nu = 2
+tau_acrobot = sp.Matrix([0, tau2])
+
+# Dynamics Equation: M * qddot + C * qdot + F * qdot + G = tau
+# qddot = M_inv * (tau - C*qdot - F*qdot - G)
+RHS_sym = tau_acrobot - ((C_sym + F_sym) @ qdot_vec + G_sym)
+qddot_sym = M_sym.LUsolve(RHS_sym) # Symbolic solve
+
+f_cont_sym = sp.Matrix.vstack(qdot_vec, qddot_sym)
+
+# Compute Jacobians ONCE symbolically
+A_sym = f_cont_sym.jacobian(x_vec)
+B_sym = f_cont_sym.jacobian(u_vec) # Jacobian w.r.t the scalar input
+
+# Generate Numerical Functions (Global)
+# These are fast compiled numpy functions
+calc_continuous_dynamics = lambdify(list(x_vec) + list(u_vec), f_cont_sym, 'numpy')
+func_A = lambdify(list(x_vec) + list(u_vec), A_sym, 'numpy')
+func_B = lambdify(list(x_vec) + list(u_vec), B_sym, 'numpy')
+
+
+dt = 1e-2   # discretization step -> changed from 1e-3 to be faster
 ns = 4      # number of states
-ni = 1      # number of inputs
+ni = 2      # number of inputs
 
 def dynamics(xx, uu):
     # Discrete dynamics of gymnast
@@ -151,8 +194,25 @@ def dynamics(xx, uu):
     
     return xx_next
 
-
 def continuous_dynamics(xx, uu):
+    
+    #State and control extraction
+    q = xx[0 : 2]
+    qdot = xx[2 : 4]
+    
+    M_val = M_func(*q)
+    
+    tau_1 = 0.0
+    
+    RHS_val = RHS_func(*q, *qdot, tau_1, uu[1]).flatten()
+    
+    qddot = np.linalg.solve(M_val, RHS_val)
+    
+    x_dot = np.concatenate((qdot, qddot))
+    
+    return x_dot
+
+def continuous_dynamics_old(xx, uu):
     # Continuous-dynamics of gymnast
     
     xx = xx.squeeze()
@@ -187,6 +247,17 @@ def continuous_dynamics(xx, uu):
     # F_calc = np.array(F_num, dtype=float).squeeze()
     
     # output = M_calc @ xx[2:] + C_calc @ xx[2:] + F_calc @ xx[2:] + G_calc
+
+
+### Task 2 new ###
+
+def Calculate_A_B_matrixes(x_t, u_t):
+    # Fast numerical evaluation
+    x_args = x_t.tolist()
+    u_args = u_t.tolist()
     
+    # Continuous Jacobians
+    A_c = np.array(func_A(*x_args, *u_args), dtype=float)
+    B_c = np.array(func_B(*x_args, *u_args), dtype=float)
     
-    
+    return A_c, B_c
