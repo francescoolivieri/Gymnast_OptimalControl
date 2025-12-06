@@ -55,10 +55,9 @@ def define_reference_piecewise(T, x_e1, x_e2, u_e1, u_e2):
 
     return t_ref, x_ref, u_ref
 
-
 u_target1 = np.array([0.5, -0.3])
 u_target2 = np.array([-0.5, 0.3])
-theta_guess1 = (-0.5, 1.9)#How do I explain this guessed values?
+theta_guess1 = (-0.5, 1.9)
 theta_guess2 = (0.5, -1.9)
 
 x_e1, u_e1 = compute_equilibrium(u_target1, theta_guess1)
@@ -152,7 +151,7 @@ def terminal_blocks(x_T, x_ref_T, Q_T):
     #S_t = (need to calculate the hessian of l_t position 12) + (need to calculate the hessian of the system pos 12)*lam_kplus1
     #Q_T = hess_l_T_x
 
-def compute_costate_trajectory(x_traj, u_traj, x_ref, u_ref): #->>Check this function
+def compute_costate_trajectory(x_traj, u_traj, x_ref, u_ref):
     N = x_traj.shape[0]
     lambda_seq = [np.zeros(nx) for _ in range(N)]
     
@@ -197,7 +196,7 @@ def build_stage_lists(x_traj, u_traj, x_ref, u_ref, lambda_seq): #->>Check this 
     Q_T_block, q_T = terminal_blocks(x_traj[-1], x_ref[-1], Q_T)
     return A_list, B_list, Q_list, R_list, S_list, q_list, r_list, Q_T_block, q_T
 
-def calculate_K_and_sigma_(A_list, B_list, Q_list, R_list, S_list, q_list, r_list, Q_T_block, q_T):
+def calculate_K_and_sigma(A_list, B_list, Q_list, R_list, S_list, q_list, r_list, Q_T_block, q_T):
     
     Tsteps = len(A_list)
     P = Q_T_block.copy()  # terminal quadratic
@@ -206,7 +205,7 @@ def calculate_K_and_sigma_(A_list, B_list, Q_list, R_list, S_list, q_list, r_lis
     K = [None] * Tsteps
     sigma = [None] * Tsteps
 
-    for t in reversed(range(Tsteps)):   #Riccati Recursion
+    for t in reversed(range(Tsteps)): #Riccati Recursion 
         A = A_list[t]; B = B_list[t]
         Q = Q_list[t]; R = R_list[t]; S = S_list[t]
         q = q_list[t]; r = r_list[t]
@@ -215,12 +214,13 @@ def calculate_K_and_sigma_(A_list, B_list, Q_list, R_list, S_list, q_list, r_lis
         F = S + B.T @ P @ A
         g = r + B.T @ p
 
-        K_t = -np.linalg.solve(G, F)        # 2×4
-        sigma_t = -np.linalg.solve(G, g)    # 2×1
+        # Numerically stable
+        K_t = -np.linalg.solve(G, F)
+        sigma_t = -np.linalg.solve(G, g)
 
-        # Riccati updates
-        P = Q + A.T @ P @ A - F.T @ np.linalg.solve(G, F)
-        p = q + A.T @ p - F.T @ np.linalg.solve(G, g)
+        # Compact Riccati updates (use K_t, sigma_t here)
+        P = Q + A.T @ P @ A - K_t.T @ G @ K_t
+        p = q + A.T @ p - K_t.T @ G @ sigma_t
 
         K[t] = K_t
         sigma[t] = sigma_t
@@ -237,7 +237,7 @@ def solve_with_damping(G, RHS, rho=1e-6, max_tries=6):
     # As a last resort, use pseudo-inverse
     return np.linalg.pinv(G) @ RHS, G
 
-def calculate_K_and_sigma(A_list, B_list, Q_list, R_list, S_list, q_list, r_list, Q_T_block, q_T):
+def calculate_K_and_sigma_(A_list, B_list, Q_list, R_list, S_list, q_list, r_list, Q_T_block, q_T):
     Tsteps = len(A_list)
     P = Q_T_block.copy()
     p = q_T.copy()
