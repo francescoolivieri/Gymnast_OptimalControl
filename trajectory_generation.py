@@ -35,7 +35,6 @@ def compute_equilibrium(u_target, theta_guess):
     u_e = np.array(u_target, dtype=float).reshape(-1)
     return x_e, u_e
 
-
 def define_reference_piecewise(T, x_e1, x_e2, u_e1, u_e2):
     """
     Build a reference with two constant segments: x_e1 for t < T/2, x_e2 for t ≥ T/2.
@@ -55,38 +54,19 @@ def define_reference_piecewise(T, x_e1, x_e2, u_e1, u_e2):
 
     return t_ref, x_ref, u_ref
 
-u_target1 = np.array([0.5, -0.3])
-u_target2 = np.array([-0.5, 0.3])
-theta_guess1 = (-0.5, 1.9)
-theta_guess2 = (0.5, -1.9)
+#Targeted Angle: approx 20 degrees ~ 0.35 radians
+u_target1 = np.array([0.5, 0.5])
+u_target2 = np.array([-0.5, -0.5])
+theta_guess1 = (0.35, -0.35)
+theta_guess2 = (-0.35, 0.35)
 
 x_e1, u_e1 = compute_equilibrium(u_target1, theta_guess1)
 x_e2, u_e2 = compute_equilibrium(u_target2, theta_guess2)
 
+print("First equilibrium x_e1 and u_e1 = ", x_e1, u_e1)
+print("Second equilibrium x_e2 and u_e2 = ", x_e2, u_e2)
+
 t_ref, x_ref, u_ref = define_reference_piecewise(T, x_e1, x_e2, u_e1, u_e2)
-
-
-# Optional: plot to verify
-plt.figure(figsize=(10,5))
-plt.subplot(2,1,1)
-plt.plot(t_ref, x_ref[:,0], label='theta1')
-plt.plot(t_ref, x_ref[:,1], label='theta2')
-plt.ylabel('Angles [rad]')
-plt.legend()
-plt.subplot(2,1,2)
-plt.plot(t_ref, u_ref[:,0], label='tau1')
-plt.plot(t_ref, u_ref[:,1], label='tau2')
-plt.xlabel('Time [s]')
-plt.ylabel('Torque')
-plt.legend()
-plt.tight_layout()
-plt.show()
-
-
-print("x_ref[0]   =", x_ref[0])        # should be close to x_e1
-print("u_ref[0]   =", u_ref[0])        # close to u_e1
-print("x_ref[-1]  =", x_ref[-1])       # close to x_e2
-print("u_ref[-1]  =", u_ref[-1])       # close to u_e2
 
 def simulate_open_loop(x0, u_traj):
     N = u_traj.shape[0]
@@ -227,53 +207,6 @@ def calculate_K_and_sigma(A_list, B_list, Q_list, R_list, S_list, q_list, r_list
 
     return K, sigma
 
-def solve_with_damping(G, RHS, rho=1e-6, max_tries=6):
-    for k in range(max_tries):
-        Gd = G + (rho * (10**k)) * np.eye(G.shape[0])
-        try:
-            return np.linalg.solve(Gd, RHS), Gd
-        except np.linalg.LinAlgError:
-            continue
-    # As a last resort, use pseudo-inverse
-    return np.linalg.pinv(G) @ RHS, G
-
-def calculate_K_and_sigma_(A_list, B_list, Q_list, R_list, S_list, q_list, r_list, Q_T_block, q_T):
-    Tsteps = len(A_list)
-    P = Q_T_block.copy()
-    p = q_T.copy()
-    K = [None] * Tsteps
-    sigma = [None] * Tsteps
-
-    for t in reversed(range(Tsteps)):
-        A = A_list[t]; B = B_list[t]
-        Q = Q_list[t]; R = R_list[t]; S = S_list[t]
-        q = q_list[t]; r = r_list[t]
-
-        G = R + B.T @ P @ B
-        F = S + B.T @ P @ A
-        g = r + B.T @ p
-
-        # Damped solves for stability
-        K_t, Gd = solve_with_damping(G, F, rho=1e-6)
-        K_t = -K_t
-        sigma_t, _ = solve_with_damping(G, g, rho=1e-6)
-        sigma_t = -sigma_t
-
-        # P and p updates using expanded forms (dimension-safe)
-        # Use the same damped Gd
-        GF, _ = solve_with_damping(Gd, F, rho=0.0)
-        Gg, _ = solve_with_damping(Gd, g, rho=0.0)
-        P = Q + A.T @ P @ A - F.T @ GF
-        p = q + A.T @ p - F.T @ Gg
-
-        # Symmetrize P to control numerical drift
-        P = 0.5 * (P + P.T)
-
-        K[t] = K_t
-        sigma[t] = sigma_t
-
-    return K, sigma
-
 def forward_closed_loop_update(x_traj, u_traj, K, sigma, gamma=1.0):
     N =  x_traj.shape[0]
     x_new = x_traj.copy()
@@ -287,8 +220,7 @@ def forward_closed_loop_update(x_traj, u_traj, K, sigma, gamma=1.0):
         
     return x_new, u_new
     
-
-def newton_Algorithm(x0, x_ref, u_ref, max_iters=50, tol=1e-6, gamma=1.0):
+def newton_Algorithm(x0, x_ref, u_ref, max_iters, tol=1e-6, gamma=1.0):
     
     #Initialize a feasible trajectory given the input
     u_traj = u_ref.copy()
@@ -327,22 +259,38 @@ x0 = x_e1.copy()
 # Run Newton
 x_opt, u_opt, K_seq, sigma_seq = newton_Algorithm(x0, x_ref, u_ref, max_iters=50, tol=1e-6, gamma=0.1)
 
-# Inspect
-print("Final state:", x_opt[-1])
-print("Final input:", u_opt[-1])
+def plot_results(t_ref, x_ref, u_ref, x_opt, u_opt):
+    # Print results
+    print("\n--- Optimal Trajectory Results ---")
+    print(f"Final State (x_opt[-1]): {x_opt[-1]}")
+    print(f"Final Input (u_opt[-1]): {u_opt[-1]}")
+    
+    # Plot 1: Reference Trajectory
+    plt.figure(figsize=(10,5))
+    plt.subplot(2,1,1)
+    plt.plot(t_ref, x_ref[:,0], label='theta1 (ref)')
+    plt.plot(t_ref, x_ref[:,1], label='theta2 (ref)')
+    plt.ylabel('Angles [rad]'); plt.legend()
+    plt.subplot(2,1,2)
+    plt.plot(t_ref, u_ref[:,0], label='tau1 (ref)')
+    plt.plot(t_ref, u_ref[:,1], label='tau2 (ref)')
+    plt.xlabel('Time [s]'); plt.ylabel('Torque'); plt.legend()
+    plt.tight_layout()
 
-plt.figure(figsize=(10,6))
-plt.subplot(2,1,1)
-plt.plot(t_ref, x_opt[:,0], label='theta1 (opt)')
-plt.plot(t_ref, x_opt[:,1], label='theta2 (opt)')
-plt.plot(t_ref, x_ref[:,0], '--', label='theta1 (ref)')
-plt.plot(t_ref, x_ref[:,1], '--', label='theta2 (ref)')
-plt.legend(); plt.ylabel('Angles [rad]')
+    # Plot 2: Optimal vs. Reference Trajectory
+    plt.figure(figsize=(10,6))
+    plt.subplot(2,1,1)
+    plt.plot(t_ref, x_opt[:,0], label='theta1 (opt)')
+    plt.plot(t_ref, x_opt[:,1], label='theta2 (opt)')
+    plt.plot(t_ref, x_ref[:,0], '--', label='theta1 (ref)')
+    plt.plot(t_ref, x_ref[:,1], '--', label='theta2 (ref)')
+    plt.legend(); plt.ylabel('Angles [rad]')
 
-plt.subplot(2,1,2)
-plt.plot(t_ref[:-1], u_opt[:-1,0], label='tau1 (opt)')
-plt.plot(t_ref[:-1], u_opt[:-1,1], label='tau2 (opt)')
-plt.plot(t_ref[:-1], u_ref[:-1,0], '--', label='tau1 (ref)')
-plt.plot(t_ref[:-1], u_ref[:-1,1], '--', label='tau2 (ref)')
-plt.legend(); plt.xlabel('Time [s]'); plt.ylabel('Torque')
-plt.tight_layout(); plt.show()
+    plt.subplot(2,1,2)
+    plt.plot(t_ref[:-1], u_opt[:-1,0], label='tau1 (opt)')
+    plt.plot(t_ref[:-1], u_opt[:-1,1], label='tau2 (opt)')
+    plt.plot(t_ref[:-1], u_ref[:-1,0], '--', label='tau1 (ref)')
+    plt.plot(t_ref[:-1], u_ref[:-1,1], '--', label='tau2 (ref)')
+    plt.legend(); plt.xlabel('Time [s]'); plt.ylabel('Torque')
+    plt.tight_layout()
+    
