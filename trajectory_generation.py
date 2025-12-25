@@ -220,7 +220,7 @@ def forward_closed_loop_update(x_traj, u_traj, K, sigma, gamma=1.0):
         
     return x_new, u_new
     
-def newton_Algorithm(x0, x_ref, u_ref, max_iters, tol=1e-6, gamma=1.0):
+def newton_Algorithm(x0, x_ref, u_ref, max_iters, tol=1e-6, beta=0.7, c=0.5, gamma_0=1.0):
     
     #Initialize a feasible trajectory given the input
     u_traj = u_ref.copy()
@@ -234,18 +234,38 @@ def newton_Algorithm(x0, x_ref, u_ref, max_iters, tol=1e-6, gamma=1.0):
         # Stage lists
         A_list, B_list, Q_list, R_list, S_list, q_list, r_list, Q_T_block, q_T = \
         build_stage_lists(x_traj, u_traj, x_ref, u_ref, lambda_seq)
-        ##A, B = Calculate_A_B_matrixes(x_t, u_t)
-        ##l_t, grad_l_t_x, grad_l_t_u, hess_l_t_x, hess_l_t_u = derivatives_Cost(x, x_ref, u, u_ref, Q, R, Q_T=None, terminal=False)
-        ##l_T, grad_l_T_x, hess_l_T_x = derivatives_Cost(x, x_ref, u, u_ref, Q, R, Q_T, terminal=True)
         
         #Riccati -> The second backward pass is within the function
         K, sigma = calculate_K_and_sigma(A_list, B_list, Q_list, R_list, S_list, q_list, r_list, Q_T_block, q_T)
     
+        gamma_i = gamma_0
+        max_line_search_iters = 20
+        i = 0
+        
+        # Initial forward pass and check -> RHS eq
+        #But here the formula is with the derivative of the cost times the direction 
+        target_cost_k = cost_k + c * gamma_i * directional_derivative
+        
         #Forward loop is within the function    
-        x_new, u_new = forward_closed_loop_update(x_traj, u_traj, K, sigma, gamma=gamma)
+        x_new, u_new = forward_closed_loop_update(x_traj, u_traj, K, sigma, gamma=gamma_i)
 
-        #Convergence Check
-        # Convergence check
+        cost_new = total_cost(x_new, u_new, x_ref, u_ref, Q, R, Q_T)
+
+        while cost_new > target_cost_k and i < max_line_search_iters:
+            gamma_i *= beta
+            target_cost_k = cost_k + c * gamma_i * directional_derivative
+
+            # Re-run forward pass with new gamma
+            x_new, u_new = forward_closed_loop_update(x_traj, u_traj, K, sigma, gamma=gamma_i)
+            cost_new = total_cost(x_new, u_new, x_ref, u_ref, Q, R, Q_T)
+
+            i += 1
+            
+        if i == max_line_search_iters:
+            print(f"Line search failed to find a suitable step size at iter {k}. Stopping.")
+            break
+        
+        
         delta = np.max(np.abs(x_new - x_traj)) + np.max(np.abs(u_new - u_traj))
         x_traj, u_traj = x_new, u_new
         if delta < tol:
@@ -253,11 +273,34 @@ def newton_Algorithm(x0, x_ref, u_ref, max_iters, tol=1e-6, gamma=1.0):
         
     return x_traj, u_traj, K, sigma
 
+def total_cost(x_traj, u_traj, x_ref, u_ref, Q, R, Q_T):
+    
+    """Computes the total cost
+    """
+    N = x_traj.shape[0]
+    cost = 0.0
+    
+    for t in range(N - 1): #Stage Cost (t=0 to N-2)
+        x = x_traj[t]
+        u = u_traj[t]
+        x_r = x_ref[t]
+        u_r = u_ref[t]
+        
+        cost += (x - x_r).T @ Q @ (x - x_r)
+        cost += (u - u_r).T @ R @ (u - u_r)
+
+    #Terminal Cost (t = N-1)
+    x_T = x_traj[-1]
+    x_r_T = x_ref[-1]
+    cost += (x_T - x_r_T).T @ Q_T @ (x_T - x_r_T)
+    
+    return cost
+    
 # Choose initial state (e.g., start at first equilibrium)
 x0 = x_e1.copy()
-
+    
 # Run Newton
-x_opt, u_opt, K_seq, sigma_seq = newton_Algorithm(x0, x_ref, u_ref, max_iters=50, tol=1e-6, gamma=0.1)
+x_opt, u_opt, K_seq, sigma_seq = newton_Algorithm(x0, x_ref, u_ref, max_iters=50, tol=1e-6)
 
 def plot_results(t_ref, x_ref, u_ref, x_opt, u_opt):
     # Print results
@@ -293,4 +336,3 @@ def plot_results(t_ref, x_ref, u_ref, x_opt, u_opt):
     plt.plot(t_ref[:-1], u_ref[:-1,1], '--', label='tau2 (ref)')
     plt.legend(); plt.xlabel('Time [s]'); plt.ylabel('Torque')
     plt.tight_layout()
-    
