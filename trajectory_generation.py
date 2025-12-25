@@ -126,11 +126,6 @@ def terminal_blocks(x_T, x_ref_T, Q_T):
     return Q_T, q_t   # (Q_T_block, q_T)
 
 
-    #Q_t = hess_l_t_x[?] + (need yo calculate 11 f)*lam_kplus1
-    #R_t = hess_l_t_u[?] + (need to calculate the hessian of the system position 22)*lam_kplus1
-    #S_t = (need to calculate the hessian of l_t position 12) + (need to calculate the hessian of the system pos 12)*lam_kplus1
-    #Q_T = hess_l_T_x
-
 def compute_costate_trajectory(x_traj, u_traj, x_ref, u_ref):
     N = x_traj.shape[0]
     lambda_seq = [np.zeros(nx) for _ in range(N)]
@@ -184,7 +179,8 @@ def calculate_K_and_sigma(A_list, B_list, Q_list, R_list, S_list, q_list, r_list
 
     K = [None] * Tsteps
     sigma = [None] * Tsteps
-
+    expected_reduction = 0.0
+    
     for t in reversed(range(Tsteps)): #Riccati Recursion 
         A = A_list[t]; B = B_list[t]
         Q = Q_list[t]; R = R_list[t]; S = S_list[t]
@@ -198,6 +194,9 @@ def calculate_K_and_sigma(A_list, B_list, Q_list, R_list, S_list, q_list, r_list
         K_t = -np.linalg.solve(G, F)
         sigma_t = -np.linalg.solve(G, g)
 
+        # Update expected reduction: sum of g^T * sigma
+        expected_reduction += g.T @ sigma_t
+        
         # Compact Riccati updates (use K_t, sigma_t here)
         P = Q + A.T @ P @ A - K_t.T @ G @ K_t
         p = q + A.T @ p - K_t.T @ G @ sigma_t
@@ -205,7 +204,7 @@ def calculate_K_and_sigma(A_list, B_list, Q_list, R_list, S_list, q_list, r_list
         K[t] = K_t
         sigma[t] = sigma_t
 
-    return K, sigma
+    return K, sigma, expected_reduction
 
 def forward_closed_loop_update(x_traj, u_traj, K, sigma, gamma=1.0):
     N =  x_traj.shape[0]
@@ -219,59 +218,6 @@ def forward_closed_loop_update(x_traj, u_traj, K, sigma, gamma=1.0):
         x_new[t+1] = dynamics(x_new[t], u_new[t])
         
     return x_new, u_new
-    
-def newton_Algorithm(x0, x_ref, u_ref, max_iters, tol=1e-6, beta=0.7, c=0.5, gamma_0=1.0):
-    
-    #Initialize a feasible trajectory given the input
-    u_traj = u_ref.copy()
-    x_traj = simulate_open_loop(x0, u_traj)
-    
-    for k in range(max_iters):
-        
-        #Step 1
-        lambda_seq = compute_costate_trajectory(x_traj, u_traj, x_ref, u_ref)
-    
-        # Stage lists
-        A_list, B_list, Q_list, R_list, S_list, q_list, r_list, Q_T_block, q_T = \
-        build_stage_lists(x_traj, u_traj, x_ref, u_ref, lambda_seq)
-        
-        #Riccati -> The second backward pass is within the function
-        K, sigma = calculate_K_and_sigma(A_list, B_list, Q_list, R_list, S_list, q_list, r_list, Q_T_block, q_T)
-    
-        gamma_i = gamma_0
-        max_line_search_iters = 20
-        i = 0
-        
-        # Initial forward pass and check -> RHS eq
-        #But here the formula is with the derivative of the cost times the direction 
-        target_cost_k = cost_k + c * gamma_i * directional_derivative
-        
-        #Forward loop is within the function    
-        x_new, u_new = forward_closed_loop_update(x_traj, u_traj, K, sigma, gamma=gamma_i)
-
-        cost_new = total_cost(x_new, u_new, x_ref, u_ref, Q, R, Q_T)
-
-        while cost_new > target_cost_k and i < max_line_search_iters:
-            gamma_i *= beta
-            target_cost_k = cost_k + c * gamma_i * directional_derivative
-
-            # Re-run forward pass with new gamma
-            x_new, u_new = forward_closed_loop_update(x_traj, u_traj, K, sigma, gamma=gamma_i)
-            cost_new = total_cost(x_new, u_new, x_ref, u_ref, Q, R, Q_T)
-
-            i += 1
-            
-        if i == max_line_search_iters:
-            print(f"Line search failed to find a suitable step size at iter {k}. Stopping.")
-            break
-        
-        
-        delta = np.max(np.abs(x_new - x_traj)) + np.max(np.abs(u_new - u_traj))
-        x_traj, u_traj = x_new, u_new
-        if delta < tol:
-            break
-        
-    return x_traj, u_traj, K, sigma
 
 def total_cost(x_traj, u_traj, x_ref, u_ref, Q, R, Q_T):
     
@@ -295,12 +241,63 @@ def total_cost(x_traj, u_traj, x_ref, u_ref, Q, R, Q_T):
     cost += (x_T - x_r_T).T @ Q_T @ (x_T - x_r_T)
     
     return cost
+
+def newton_Algorithm(x0, x_ref, u_ref, max_iters, tol=1e-6, beta=0.7, c=0.5, gamma_0= 0.1):
     
+    #Initialize a feasible trajectory given the input
+    u_traj = u_ref.copy()
+    x_traj = simulate_open_loop(x0, u_traj)
+
+    # Initial cost calculation
+    cost_k = total_cost(x_traj, u_traj, x_ref, u_ref, Q, R, Q_T)
+        
+    for k in range(max_iters):
+        
+        #Step 1
+        lambda_seq = compute_costate_trajectory(x_traj, u_traj, x_ref, u_ref)
+    
+        # Stage lists
+        A_list, B_list, Q_list, R_list, S_list, q_list, r_list, Q_T_block, q_T = \
+        build_stage_lists(x_traj, u_traj, x_ref, u_ref, lambda_seq)
+
+        #Riccati -> The second backward pass is within the function
+        K, sigma, delta_J = calculate_K_and_sigma(A_list, B_list, Q_list, R_list, S_list, q_list, r_list, Q_T_block, q_T)
+    
+        #Forward loop is within the function    
+        #x_new, u_new = forward_closed_loop_update(x_traj, u_traj, K, sigma, gamma=gamma_0)
+
+        gamma_i = gamma_0
+        max_line_search_iters = 20
+        success = False
+        
+        for i in range(max_line_search_iters):
+            x_new, u_new = forward_closed_loop_update(x_traj, u_traj, K, sigma, gamma=gamma_i)
+            cost_new = total_cost(x_new, u_new, x_ref, u_ref, Q, R, Q_T)
+            
+            # cost_new < current_cost + alpha * step_size * directional_derivative
+            if cost_new <= cost_k + c * gamma_i * delta_J:
+                success = True
+                break
+            
+            gamma_i *= beta
+        
+        if not success:
+            print(f"Iteration {k}: Line search failed to find sufficient decrease.")
+            break
+            
+        # Convergence check
+        x_traj, u_traj, cost_k = x_new, u_new, cost_new
+        
+        if np.max(np.abs(sigma)) < tol:
+            break
+        
+    return x_traj, u_traj, K, sigma
+
 # Choose initial state (e.g., start at first equilibrium)
 x0 = x_e1.copy()
-    
-# Run Newton
-x_opt, u_opt, K_seq, sigma_seq = newton_Algorithm(x0, x_ref, u_ref, max_iters=50, tol=1e-6)
+
+# Run Newton newton_Algorithm(x0, x_ref, u_ref, max_iters, tol=1e-6, beta=0.7, c=0.5, gamma_0=1.0)
+x_opt, u_opt, K_seq, sigma_seq = newton_Algorithm(x0, x_ref, u_ref, max_iters=50, tol=1e-6,  beta=0.7, c=0.5, gamma_0=0.1)
 
 def plot_results(t_ref, x_ref, u_ref, x_opt, u_opt):
     # Print results
@@ -336,3 +333,148 @@ def plot_results(t_ref, x_ref, u_ref, x_opt, u_opt):
     plt.plot(t_ref[:-1], u_ref[:-1,1], '--', label='tau2 (ref)')
     plt.legend(); plt.xlabel('Time [s]'); plt.ylabel('Torque')
     plt.tight_layout()
+    
+    
+###  TASK 2 START - HAVE TO REFACTOR THIS FILE WHEN DONE WITH FIRST TWO TASKS DEFINITIVELY  ####
+
+    
+def get_poly5_coefficients(t_i, p_i, pdot_i, pdotdot_i, t_f, p_f, pdot_f, pdotdot_f):
+    """
+    Computes the coefficients of the poly-5 given starting and ending conditions.
+    For each point it's requested: time, position, velocity, acceleration. (in that order)
+    """
+    
+    b = np.array([p_i, pdot_i, pdotdot_i, p_f, pdot_f, pdotdot_f])
+    
+    A = np.array([
+        [1, t_i, t_i**2,   t_i**3,    t_i**4,    t_i**5],
+        [0, 1,  2*t_i,    3*t_i**2,  4*t_i**3,  5*t_i**4],
+        [0, 0,  2,       6*t_i,     12*t_i**2, 20*t_i**3],
+        [1, t_f, t_f**2,   t_f**3,    t_f**4,    t_f**5],
+        [0, 1,  2*t_f,    3*t_f**2,  4*t_f**3,  5*t_f**4],
+        [0, 0,  2,       6*t_f,     12*t_f**2, 20*t_f**3]
+    ])
+    
+    return np.linalg.solve(A, b)
+
+def calculate_poly5(coeffs, timeline):
+    """
+    Given coefficients (6) and the time to evaluate in the 5th-grade polynomial,
+    it returns the corresponding position, velocity, and acceleration at each time instant
+    """
+    p = []
+    p_dot = []
+    p_dotdot = []
+    
+    for t in timeline:
+
+        x = np.array([1, t, t**2, t**3, t**4, t**5])
+        
+        x_dot = np.array([0, 1, 2*t, 3*t**2, 4*t**3, 5*t**4])
+        
+        x_dotdot = np.array([0, 0, 2, 6*t, 12*t**2, 20*t**3])
+        
+        # evaluating polinomial in t
+        p.append( coeffs @ x )    
+        p_dot.append( coeffs @ x_dot )    
+        p_dotdot.append( coeffs @ x_dotdot )    
+    
+    return p, p_dot, p_dotdot
+    
+    
+
+def get_target_trajectory(plot=False):
+
+    # Setting Conditions
+    theta1_checkpoints = [0, np.pi, np.pi, np.pi, np.pi, np.pi, np.pi, 0, 0]
+    theta2_checkpoints = [0, np.pi, np.pi - (np.pi/3), np.pi + (np.pi/3), np.pi - (np.pi/4), np.pi + (np.pi/4), np.pi, 0, 0]
+
+
+    timings =     [0, 3.0, 4.5, 6., 9, 10.5, 12, 16, 18]
+    
+    if len(theta1_checkpoints) != len(timings) and len(theta1_checkpoints) == len(theta2_checkpoints):
+        print(f"Length of trajectoris")
+        exit()
+    
+    vel_start = 0.0     
+    vel_end   = 0.0      
+    acc_start = 0.0      
+    acc_end   = 0.0     
+
+    timeline = np.linspace(timings[0], timings[-1], 1000)
+
+    theta1_positions = [] 
+    theta1_velocities = []    
+    
+    theta2_positions = [] 
+    theta2_velocities = [] 
+    theta2_accelerations = []    
+
+    for i in range(len(theta1_checkpoints)-1):
+        
+        ### THETA 1 ###
+        pos_start = theta1_checkpoints[i]
+        pos_end = theta1_checkpoints[i+1]
+        
+        t_start = timings[i]
+        t_end = timings[i+1]
+        
+        coeffs = get_poly5_coefficients(t_start, pos_start, vel_start, acc_start, t_end, pos_end, vel_end, acc_end)
+
+        # Include the starting time and ending time at the beginning, in the other cases I include only the 
+        # last time step. This is useful to not introduce duplicates.
+        if i == 0: 
+            theta1_steps, theta1_dot_steps, _ = calculate_poly5(coeffs, [t for t in timeline if (t>=t_start and t<=t_end)])
+        else:
+            theta1_steps, theta1_dot_steps, _ =  calculate_poly5(coeffs, [t for t in timeline if (t>t_start and t<=t_end)])
+    
+        theta1_positions.extend( theta1_steps )
+        theta1_velocities.extend( theta1_dot_steps )
+    
+        ### THETA 2 ###
+        pos_start = theta2_checkpoints[i]
+        pos_end = theta2_checkpoints[i+1]
+        
+        t_start = timings[i]
+        t_end = timings[i+1]
+        
+        coeffs = get_poly5_coefficients(t_start, pos_start, vel_start, acc_start, t_end, pos_end, vel_end, acc_end)
+
+        if i == 0:
+            theta2_steps, theta2_dot_steps, theta2_dotdot_steps = calculate_poly5(coeffs, [t for t in timeline if (t>=t_start and t<=t_end)]) 
+        else:
+            theta2_steps, theta2_dot_steps, theta2_dotdot_steps  = calculate_poly5(coeffs, [t for t in timeline if (t>t_start and t<=t_end)]) 
+
+        theta2_positions.extend(theta2_steps)
+        theta2_velocities.extend(theta2_dot_steps)
+        theta2_accelerations.extend(theta2_dotdot_steps) # Our simplified torque
+    
+    
+    if plot:
+        plt.figure(figsize=(10,5))
+        plt.subplot(3, 1, 1)
+        plt.plot(timeline, theta1_positions)
+        plt.ylabel("Theta_1 [rad]"); plt.title("Reference Trajectory")
+        plt.grid(True)
+        
+        plt.subplot(3, 1, 2)
+        plt.plot(timeline, theta2_positions)
+        plt.xlabel("Time [t]"); plt.ylabel("Theta_2 [rad]")
+        plt.grid(True)
+        
+        plt.subplot(3, 1, 3)
+        plt.plot(timeline, theta2_accelerations)
+        plt.xlabel("Time [t]"); plt.ylabel("Tau_2 [rad]")
+        plt.grid(True)
+        
+        plt.tight_layout()
+        plt.show()
+    
+    x_ref = np.zeros((len(timeline), 4))
+    x_ref[:, 0] = theta1_positions ; x_ref[:, 1] = theta2_positions ; x_ref[:, 2] = theta1_velocities ; x_ref[:, 3] = theta2_velocities
+    
+    u_ref = np.zeros((len(timeline), 2))
+    u_ref[:, 1] = theta2_accelerations 
+    
+    return x_ref, u_ref
+    

@@ -45,7 +45,7 @@ if __name__ == '__main__':
         x0, x_ref, u_ref, 
         max_iters=1000, 
         tol=1e-6, 
-        gamma=0.1 #Still need to add the Newton step
+        gamma_0=0.1 #Still need to add the Newton step
     )
     
     print("Generating trajectory plots...")
