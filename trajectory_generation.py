@@ -125,7 +125,6 @@ def terminal_blocks(x_T, x_ref_T, Q_T):
     q_t = grad_xT
     return Q_T, q_t   # (Q_T_block, q_T)
 
-
 def compute_costate_trajectory(x_traj, u_traj, x_ref, u_ref):
     N = x_traj.shape[0]
     lambda_seq = [np.zeros(nx) for _ in range(N)]
@@ -139,7 +138,7 @@ def compute_costate_trajectory(x_traj, u_traj, x_ref, u_ref):
         # 1. Get continuous matrices
         A_c, _ = Calculate_A_B_matrixes(x_traj[t], u_traj[t])
         
-        # 2. Discretize A (Critical Step)
+        # 2. Discretize A
         A_d = np.eye(A_c.shape[0]) + A_c * dt
         
         # 3. Get Cost Gradient
@@ -154,7 +153,7 @@ def discretize_linearization(Ac, Bc, dt):
     Bd = dt * Bc
     return Ad, Bd
 
-def build_stage_lists(x_traj, u_traj, x_ref, u_ref, lambda_seq): #->>Check this function
+def build_stage_lists(x_traj, u_traj, x_ref, u_ref, lambda_seq): #
     N = x_traj.shape[0]
     A_list, B_list = [], []
     Q_list, R_list, S_list = [], [], []
@@ -197,7 +196,7 @@ def calculate_K_and_sigma(A_list, B_list, Q_list, R_list, S_list, q_list, r_list
         # Update expected reduction: sum of g^T * sigma
         expected_reduction += g.T @ sigma_t
         
-        # Compact Riccati updates (use K_t, sigma_t here)
+        # Compact Riccati updates
         P = Q + A.T @ P @ A - K_t.T @ G @ K_t
         p = q + A.T @ p - K_t.T @ G @ sigma_t
 
@@ -257,8 +256,7 @@ def newton_Algorithm(x0, x_ref, u_ref, max_iters, tol=1e-6, beta=0.7, c=0.5, gam
         lambda_seq = compute_costate_trajectory(x_traj, u_traj, x_ref, u_ref)
     
         # Stage lists
-        A_list, B_list, Q_list, R_list, S_list, q_list, r_list, Q_T_block, q_T = \
-        build_stage_lists(x_traj, u_traj, x_ref, u_ref, lambda_seq)
+        A_list, B_list, Q_list, R_list, S_list, q_list, r_list, Q_T_block, q_T = build_stage_lists(x_traj, u_traj, x_ref, u_ref, lambda_seq)
 
         #Riccati -> The second backward pass is within the function
         K, sigma, delta_J = calculate_K_and_sigma(A_list, B_list, Q_list, R_list, S_list, q_list, r_list, Q_T_block, q_T)
@@ -275,7 +273,7 @@ def newton_Algorithm(x0, x_ref, u_ref, max_iters, tol=1e-6, beta=0.7, c=0.5, gam
             cost_new = total_cost(x_new, u_new, x_ref, u_ref, Q, R, Q_T)
             
             # cost_new < current_cost + alpha * step_size * directional_derivative
-            if cost_new <= cost_k + c * gamma_i * delta_J:
+            if cost_new < cost_k + c * gamma_i * delta_J:
                 success = True
                 break
             
@@ -297,7 +295,7 @@ def newton_Algorithm(x0, x_ref, u_ref, max_iters, tol=1e-6, beta=0.7, c=0.5, gam
 x0 = x_e1.copy()
 
 # Run Newton newton_Algorithm(x0, x_ref, u_ref, max_iters, tol=1e-6, beta=0.7, c=0.5, gamma_0=1.0)
-x_opt, u_opt, K_seq, sigma_seq = newton_Algorithm(x0, x_ref, u_ref, max_iters=50, tol=1e-6,  beta=0.7, c=0.5, gamma_0=0.1)
+x_opt, u_opt, K_seq, sigma_seq = newton_Algorithm(x0, x_ref, u_ref, max_iters=50, tol=1e-6,  beta=0.7, c=0.5, gamma_0=1)
 
 def plot_results(t_ref, x_ref, u_ref, x_opt, u_opt):
     # Print results
