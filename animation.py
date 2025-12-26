@@ -15,10 +15,9 @@ def get_link_positions(theta1, theta2, l1, l2):
     return (0, x1, x2), (0, y1, y2)
 
 # --- Animation Function  ---
-def create_and_save_animation(x_opt, T, x_e1, x_e2, l1=l1, l2=l2, filename='acrobot_optimal_swing.gif'):
-    """Sets up, runs, and saves the animation, including equilibrium points."""
+def create_and_save_animation(x_opt, x_ref, T, x_e1, x_e2, l1=l1, l2=l2, filename='acrobot_optimal_swing.gif'):
+    """Sets up, runs, and saves the animation, including equilibrium points and reference ghost."""
     
-    # --- Setup Animation Plot ---
     fig, ax = plt.subplots(figsize=(6, 6))
     ax.set_aspect('equal')
     ax.set_xlim(-(l1 + l2) * 1.1, (l1 + l2) * 1.1)
@@ -36,41 +35,44 @@ def create_and_save_animation(x_opt, T, x_e1, x_e2, l1=l1, l2=l2, filename='acro
     e2_x_coords, e2_y_coords = get_link_positions(x_e2[0], x_e2[1], l1, l2)
     ax.plot(e2_x_coords[-1], e2_y_coords[-1], 'P', color='green', markersize=10, 
             markeredgewidth=2, label='Target Equilibrium (e2)')
+
+    # --- DYNAMIC OBJECTS ---
+    # The "Ghost" Reference Acrobot (Green, Dashed)
+    ref_line, = ax.plot([], [], 'o--', lw=2, color='green', alpha=0.5, label="Reference")
+    
+    # The Optimal Acrobot (Blue, Solid)
+    opt_line, = ax.plot([], [], 'o-', lw=3, color='blue', 
+                        markeredgecolor='black', markerfacecolor='red', markersize=6, label="Optimal")
+    
+    time_text = ax.text(0.05, 0.95, '', transform=ax.transAxes)
     ax.legend(loc='lower right')
 
-
-    # The line object representing the two links (DYNAMIC)
-    line, = ax.plot([], [], 'o-', lw=3, color='blue', 
-                    markeredgecolor='black', markerfacecolor='red', markersize=6)
-    # The text object to display the time
-    time_text = ax.text(0.05, 0.95, '', transform=ax.transAxes)
-
-    # --- Animation Functions (NESTED) ---
     def init_animation():
-        line.set_data([], [])
+        opt_line.set_data([], [])
+        ref_line.set_data([], [])
         time_text.set_text('')
-        return line, time_text
+        return opt_line, ref_line, time_text
 
     def update_animation(frame):
-        # The variables fig and ax MUST NOT be recreated here.
-        theta1 = x_opt[frame, 0]
-        theta2 = x_opt[frame, 1]
+        # 1. Update Optimal Acrobot
+        theta1_opt = x_opt[frame, 0]
+        theta2_opt = x_opt[frame, 1]
+        x_coords_opt, y_coords_opt = get_link_positions(theta1_opt, theta2_opt, l1, l2)
+        opt_line.set_data(x_coords_opt, y_coords_opt)
         
-        x_coords, y_coords = get_link_positions(theta1, theta2, l1, l2)
-        
-        line.set_data(x_coords, y_coords)
+        # 2. Update Reference Acrobot (The Ghost)
+        theta1_ref = x_ref[frame, 0]
+        theta2_ref = x_ref[frame, 1]
+        x_coords_ref, y_coords_ref = get_link_positions(theta1_ref, theta2_ref, l1, l2)
+        ref_line.set_data(x_coords_ref, y_coords_ref)
         
         current_time = frame * T / (x_opt.shape[0] - 1)
         time_text.set_text(f'Time: {current_time:.2f} s')
         
-        return line, time_text
+        return opt_line, ref_line, time_text
 
-    # Create and save the animation object
     ani = FuncAnimation(fig, update_animation, frames=x_opt.shape[0], 
                         init_func=init_animation, blit=False, interval=50)
 
-    # Save the animation
     ani.save(filename, writer='pillow', fps=20) 
     print(f"Animation successfully saved as {filename}.")
-
-    # IMPORTANT: DO NOT call plt.show() here. main.py calls it once.

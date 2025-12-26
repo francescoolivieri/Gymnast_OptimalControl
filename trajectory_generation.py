@@ -260,9 +260,6 @@ def newton_Algorithm(x0, x_ref, u_ref, max_iters, tol=1e-6, beta=0.7, c=0.5, gam
 
         #Riccati -> The second backward pass is within the function
         K, sigma, delta_J = calculate_K_and_sigma(A_list, B_list, Q_list, R_list, S_list, q_list, r_list, Q_T_block, q_T)
-    
-        #Forward loop is within the function    
-        #x_new, u_new = forward_closed_loop_update(x_traj, u_traj, K, sigma, gamma=gamma_0)
 
         gamma_i = gamma_0
         max_line_search_iters = 20

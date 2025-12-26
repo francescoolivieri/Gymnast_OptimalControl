@@ -54,13 +54,23 @@ if __name__ == '__main__':
     print("Generating animation...")
     
     # Use the T and l1/l2 values from the optimization setup (l1=1.0, l2=1.0)
-    create_and_save_animation(
+    '''
+        create_and_save_animation(
         x_opt, T,
         x_e1=x_e1,        
         x_e2=x_e2,
         l1=1.0, 
         l2=1.0, 
-        filename='acrobot_optimal_T4.0_combined.gif'
+        filename='acrobot_optimal.gif'
+    )
+    '''
+    create_and_save_animation(
+    x_opt=x_opt,      # Your optimal trajectory
+    x_ref=x_ref,       # Your reference trajectory (the ghost)
+    T=T,               # The total time (e.g., 10.0)
+    x_e1=x_e1,         # Equilibrium 1
+    x_e2=x_e2,         # Equilibrium 2
+    filename='acrobot_swingup.gif'
     )
     
     #Show all figures (Plots and Animation Window)
