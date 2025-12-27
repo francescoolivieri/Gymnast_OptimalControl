@@ -41,15 +41,15 @@ if __name__ == '__main__':
     print("--- Starting optimal trajectory computation---")
     x0 = x_e1.copy() # Start at the first equilibrium point
     
-    x_opt, u_opt, K_seq, sigma_seq = tg.newton_Algorithm(
+    x_opt, u_opt, K_seq, sigma_seq, history = tg.newton_Algorithm(
         x0, x_ref, u_ref, 
         max_iters=1000, 
         tol=1e-6, 
-        gamma_0=0.1 #Still need to add the Newton step
+        gamma_0=1 
     )
     
     print("Generating trajectory plots...")
-    tg.plot_results(t_ref, x_ref, u_ref, x_opt, u_opt)
+    tg.plot_results(t_ref, x_ref, u_ref, x_opt, u_opt, history)
     
     print("Generating animation...")
     
