@@ -20,6 +20,7 @@ signal.signal(signal.SIGINT, signal.SIG_DFL)
 # Import functions and global constants from trajectory_generation
 import trajectory_generation as tg
 from trajectory_generation import x_e1, x_e2, t_ref, x_ref, u_ref, T
+import trajectory_tracking as tt
 
 # Import the animation function
 from animation import create_and_save_animation
@@ -64,6 +65,12 @@ if __name__ == '__main__':
         filename='acrobot_optimal.gif'
     )
     '''
+    
+    #   Task 3: LQR tracking Test
+    run_tracking_test = True
+    if run_tracking_test:
+        tt.LQR_tracking(x_opt, u_opt)
+    
     create_and_save_animation(
     x_opt=x_opt,      # Your optimal trajectory
     x_ref=x_ref,       # Your reference trajectory (the ghost)

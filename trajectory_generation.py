@@ -383,10 +383,17 @@ def plot_results(t_ref, x_ref, u_ref, x_opt, u_opt, history):
     plt.grid(True, alpha=0.3)
     plt.show()
 
-    plt.plot(t_ref[:-1], first_sigma[:, 0], label='Initial $\sigma$ (Iter 0)')
-    plt.plot(t_ref[:-1], final_sigma[:, 0], label='Final $\sigma$ (Converged)')
-    plt.title('Descent Direction (Armijo $\sigma$)')
-    plt.legend(); plt.ylabel('Control Correction'); plt.xlabel('Time [s]')
+    if len(history['sigmas']) > 0:
+        plt.figure(figsize=(10, 4))
+        first_sigma = np.array(history['sigmas'][0])
+        final_sigma = np.array(history['sigmas'][-1])
+        
+        plt.plot(t_ref[:-1], first_sigma[:, 0], label='Initial $\sigma$ (Iter 0)')
+        plt.plot(t_ref[:-1], final_sigma[:, 0], label='Final $\sigma$ (Converged)')
+        plt.title('Descent Direction (Armijo $\sigma$)')
+        plt.legend()
+        plt.ylabel('Control Correction')
+        plt.xlabel('Time [s]')
     
 ###  TASK 2 START - HAVE TO REFACTOR THIS FILE WHEN DONE WITH FIRST TWO TASKS DEFINITIVELY  ####
 
