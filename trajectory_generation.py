@@ -5,16 +5,17 @@ import sympy as sp
 from scipy.optimize import root
 
 
-T = 4.0 #Total time in secods
-N = int(T / dt) + 1 # Number of steps (including the initial state)
+#T = 1.0 #Total time in secods
+#N = int(T / dt) + 1 # Number of steps (including the initial state)
 nu = 2 #Dimension of control vector
 nx = 4 #Dimension of state vector
-N_opt = N * nx + (N-1) * nu #Total number of optimization values
+#N_opt = N * nx + (N-1) * nu #Total number of optimization values
 
 #   Cost Weights
-Q = np.diag([10.0, 10.0, 1.0, 1.0])
-R = np.diag([0.1, 0.1])
-Q_T = np.diag([200, 200, 50, 50])
+# Relaxed for tracking fully actuated reference with underactuated acrobot
+Q = np.diag([130.0, 30.0, 0.0001 , 0.0001])  
+R = np.diag([1e-6, 1.5])                  
+Q_T = np.diag([130, 130., 1., 1.0])  
 
 def compute_equilibrium(u_target, theta_guess):
     #Equation yields G(theta1, theta2) = u_target
@@ -54,26 +55,33 @@ def define_reference_piecewise(T, x_e1, x_e2, u_e1, u_e2):
 
     return t_ref, x_ref, u_ref
 
-#Targeted Angle: approx 20 degrees ~ 0.35 radians
-u_target1 = np.array([0.5, 0.5])
-u_target2 = np.array([-0.5, -0.5])
-theta_guess1 = (0.35, -0.35)
-theta_guess2 = (-0.35, 0.35)
+# #Targeted Angle: approx 20 degrees ~ 0.35 radians
+# u_target1 = np.array([0.5, 0.5])
+# u_target2 = np.array([-0.5, -0.5])
+# theta_guess1 = (0.35, -0.35)
+# theta_guess2 = (-0.35, 0.35)
 
-x_e1, u_e1 = compute_equilibrium(u_target1, theta_guess1)
-x_e2, u_e2 = compute_equilibrium(u_target2, theta_guess2)
+# x_e1, u_e1 = compute_equilibrium(u_target1, theta_guess1)
+# x_e2, u_e2 = compute_equilibrium(u_target2, theta_guess2)
 
-print("First equilibrium x_e1 and u_e1 = ", x_e1, u_e1)
-print("Second equilibrium x_e2 and u_e2 = ", x_e2, u_e2)
+# print("First equilibrium x_e1 and u_e1 = ", x_e1, u_e1)
+# print("Second equilibrium x_e2 and u_e2 = ", x_e2, u_e2)
 
-t_ref, x_ref, u_ref = define_reference_piecewise(T, x_e1, x_e2, u_e1, u_e2)
+# t_ref, x_ref, u_ref = define_reference_piecewise(T, x_e1, x_e2, u_e1, u_e2)
 
 def simulate_open_loop(x0, u_traj):
-    N = u_traj.shape[0]
-    x_traj = np.zeros((N, nx))
+    """
+    Simulate system forward from x0 using control sequence u_traj.
+    """
+    N_controls = u_traj.shape[0]
+    N_states = N_controls + 1  # We get one more state than controls
+    
+    x_traj = np.zeros((N_states, nx))
     x_traj[0] = x0
-    for t in range(N-1):
-        x_traj[t+1] = dynamics(x_traj[t], u_traj[t])  # uses your RK4 dynamics
+    
+    for t in range(N_controls):
+        x_traj[t+1] = dynamics(x_traj[t], u_traj[t])
+    
     return x_traj
 
 def derivatives_Cost(x, x_ref, u, u_ref, Q, R, Q_T=None, terminal=False):
@@ -241,11 +249,24 @@ def total_cost(x_traj, u_traj, x_ref, u_ref, Q, R, Q_T):
     
     return cost
 
-def newton_Algorithm(x0, x_ref, u_ref, max_iters, tol=1e-6, beta=0.7, c=0.5, gamma_0= 0.1):
+def newton_Algorithm(x0, x_ref, u_ref, max_iters, tol=1e-4, beta=0.7, c=0.3, gamma_0= 0.01):
     
+    # Ensure u_ref has correct dimension
+    if u_ref.shape[0] == x_ref.shape[0]:
+        print(f" u_ref has same length as x_ref ({u_ref.shape[0]}). Using first N-1 controls.")
+        u_ref = u_ref[:-1]
+    
+    if u_ref.shape[0] != x_ref.shape[0] - 1:
+        raise ValueError(f"Incompatible dimensions: x_ref has {x_ref.shape[0]} states but u_ref has {u_ref.shape[0]} controls (expected {x_ref.shape[0]-1})")
+    
+ 
     #Initialize a feasible trajectory given the input
     u_traj = u_ref.copy()
     x_traj = simulate_open_loop(x0, u_traj)
+    
+    # Check dimensions match
+    assert x_traj.shape[0] == x_ref.shape[0], \
+        f"Simulated trajectory length mismatch: {x_traj.shape[0]} vs {x_ref.shape[0]}"
 
     # Initial cost calculation
     cost_k = total_cost(x_traj, u_traj, x_ref, u_ref, Q, R, Q_T)
@@ -281,24 +302,36 @@ def newton_Algorithm(x0, x_ref, u_ref, max_iters, tol=1e-6, beta=0.7, c=0.5, gam
             break
             
         # Convergence check
+        cost_reduction = cost_k - cost_new
         x_traj, u_traj, cost_k = x_new, u_new, cost_new
         
+        # Print progress
+        if k % 10 == 0:
+            print(f"Iter {k}: Cost={cost_k:.2f}, diff_cost={cost_reduction:.2e}, ")
+        
         if np.max(np.abs(sigma)) < tol:
+            print(f"Converged at iteration {k}!")
             break
         
     return x_traj, u_traj, K, sigma
 
 # Choose initial state (e.g., start at first equilibrium)
-x0 = x_e1.copy()
+# x0 = x_e1.copy()
 
 # Run Newton newton_Algorithm(x0, x_ref, u_ref, max_iters, tol=1e-6, beta=0.7, c=0.5, gamma_0=1.0)
-x_opt, u_opt, K_seq, sigma_seq = newton_Algorithm(x0, x_ref, u_ref, max_iters=50, tol=1e-6,  beta=0.7, c=0.5, gamma_0=1)
+# x_opt, u_opt, K_seq, sigma_seq = newton_Algorithm(x0, x_ref, u_ref, max_iters=50, tol=1e-6,  beta=0.7, c=0.5, gamma_0=1)
 
 def plot_results(t_ref, x_ref, u_ref, x_opt, u_opt):
+    """
+    Plot reference and optimal trajectories.
+    """
     # Print results
     print("\n--- Optimal Trajectory Results ---")
     print(f"Final State (x_opt[-1]): {x_opt[-1]}")
     print(f"Final Input (u_opt[-1]): {u_opt[-1]}")
+    
+    # For plotting controls, use t_ref[:-1] since controls have N-1 elements
+    t_control = t_ref[:-1]
     
     # Plot 1: Reference Trajectory
     plt.figure(figsize=(10,5))
@@ -307,8 +340,8 @@ def plot_results(t_ref, x_ref, u_ref, x_opt, u_opt):
     plt.plot(t_ref, x_ref[:,1], label='theta2 (ref)')
     plt.ylabel('Angles [rad]'); plt.legend()
     plt.subplot(2,1,2)
-    plt.plot(t_ref, u_ref[:,0], label='tau1 (ref)')
-    plt.plot(t_ref, u_ref[:,1], label='tau2 (ref)')
+    plt.plot(t_control, u_ref[:,0], label='tau1 (ref)')
+    plt.plot(t_control, u_ref[:,1], label='tau2 (ref)')
     plt.xlabel('Time [s]'); plt.ylabel('Torque'); plt.legend()
     plt.tight_layout()
 
@@ -322,16 +355,29 @@ def plot_results(t_ref, x_ref, u_ref, x_opt, u_opt):
     plt.legend(); plt.ylabel('Angles [rad]')
 
     plt.subplot(2,1,2)
-    plt.plot(t_ref[:-1], u_opt[:-1,0], label='tau1 (opt)')
-    plt.plot(t_ref[:-1], u_opt[:-1,1], label='tau2 (opt)')
-    plt.plot(t_ref[:-1], u_ref[:-1,0], '--', label='tau1 (ref)')
-    plt.plot(t_ref[:-1], u_ref[:-1,1], '--', label='tau2 (ref)')
+    plt.plot(t_control, u_opt[:,0], label='tau1 (opt)')
+    plt.plot(t_control, u_opt[:,1], label='tau2 (opt)')
+    plt.plot(t_control, u_ref[:,0], '--', label='tau1 (ref)')
+    plt.plot(t_control, u_ref[:,1], '--', label='tau2 (ref)')
     plt.legend(); plt.xlabel('Time [s]'); plt.ylabel('Torque')
     plt.tight_layout()
     
+    plt.savefig("figures/acrobot_traj.png")
     
-###  TASK 2 START - HAVE TO REFACTOR THIS FILE WHEN DONE WITH FIRST TWO TASKS DEFINITIVELY  ####
+    
+###  TASK 2 START - HAVE TO REFACTOR THIS FILE WHEN DONE WITH FIRST TWO TASKS DEFINITIVELY  ####    
+    
+def get_fully_actuated_ref():
+    
+    data = np.load("fully_actuated_trajectory.npz")
+    u_ref = np.zeros(data["u"].shape)
+    u_ref[:, 1] = data["u"][:, 1]  # Acrobot: tau1=0, tau2=elbow torque from reference
+    
+    # Note: multiply ref torque to be more accurate (>effort for underactuated system)  
+    return data["x"], np.multiply(u_ref, 2), data["time"] #6.5
+    
 
+# Old manual reference trials    
     
 def get_poly5_coefficients(t_i, p_i, pdot_i, pdotdot_i, t_f, p_f, pdot_f, pdotdot_f):
     """
@@ -379,13 +425,41 @@ def calculate_poly5(coeffs, timeline):
     
 
 def get_target_trajectory(plot=False):
+    
+    # u_targets = [
+    #     np.array([0, 4.5]),    # Positive symmetric
+    #     np.array([0, -2.5]),   # Mixed 1
+    # ]
+    # theta_guess = (0.0, 0.0)
+    # x_e1, u_e1 = compute_equilibrium(u_targets[0], theta_guess)
+    # x_e2, u_e2 = compute_equilibrium(u_targets[1], theta_guess)
+    # theta1_checkpoints = [0, x_e1[0], x_e2[0]]
+    # theta2_checkpoints = [0, x_e1[1], x_e2[1]]
+    # timings =  [0, 1.0, 2.0]
 
-    # Setting Conditions
-    theta1_checkpoints = [0, np.pi, np.pi, np.pi, np.pi, np.pi, np.pi, 0, 0]
-    theta2_checkpoints = [0, np.pi, np.pi - (np.pi/3), np.pi + (np.pi/3), np.pi - (np.pi/4), np.pi + (np.pi/4), np.pi, 0, 0]
 
-
-    timings =     [0, 3.0, 4.5, 6., 9, 10.5, 12, 16, 18]
+    # Setting constraints for the trajectory
+    theta1_checkpoints = [
+        0,              # t=6:  End of pumping, still down
+        -np.pi/4,        # t=10: Start rising
+        np.pi,          # t=18: Reach inverted position
+        np.pi,          # t=21: Hold briefly
+    ]
+    
+    theta2_checkpoints = [
+        0,              # t=6:  End of pumping (must match sinusoid end!)
+        0,              # t=10: Align for swing-up
+        0,              # t=14: Stay aligned
+        0,              # t=18: Arrive at top, aligned
+        0,              # t=21: Hold
+    ]
+    
+    
+    timings = [0.0, 2.0, 4.0, 10.0]
+    
+    # theta1_checkpoints = [0, np.pi]
+    # theta2_checkpoints = [0, 0]
+    # timings =  [0, 1.0]
     
     if len(theta1_checkpoints) != len(timings) and len(theta1_checkpoints) == len(theta2_checkpoints):
         print(f"Length of trajectoris")
@@ -396,7 +470,7 @@ def get_target_trajectory(plot=False):
     acc_start = 0.0      
     acc_end   = 0.0     
 
-    timeline = np.linspace(timings[0], timings[-1], 1000)
+    timeline = np.linspace(timings[0], timings[-1], 500)
 
     theta1_positions = [] 
     theta1_velocities = []    
@@ -425,6 +499,11 @@ def get_target_trajectory(plot=False):
     
         theta1_positions.extend( theta1_steps )
         theta1_velocities.extend( theta1_dot_steps )
+        
+        # if i == 0:
+        #     theta1_velocities.extend( np.multiply(theta1_dot_steps, 15) )
+        # else:
+        #     theta1_velocities.extend( np.multiply(theta1_dot_steps, 5) )
     
         ### THETA 2 ###
         pos_start = theta2_checkpoints[i]
@@ -458,7 +537,7 @@ def get_target_trajectory(plot=False):
         plt.grid(True)
         
         plt.subplot(3, 1, 3)
-        plt.plot(timeline, theta2_accelerations)
+        plt.plot(timeline, theta1_velocities)
         plt.xlabel("Time [t]"); plt.ylabel("Tau_2 [rad]")
         plt.grid(True)
         
@@ -469,7 +548,7 @@ def get_target_trajectory(plot=False):
     x_ref[:, 0] = theta1_positions ; x_ref[:, 1] = theta2_positions ; x_ref[:, 2] = theta1_velocities ; x_ref[:, 3] = theta2_velocities
     
     u_ref = np.zeros((len(timeline), 2))
-    u_ref[:, 1] = theta2_accelerations 
-    
-    return x_ref, u_ref
-    
+    u_ref[:, 1] = np.multiply(theta1_velocities, 10) # we need bigger effort on u
+     
+    return x_ref, u_ref[:-1], timeline
+

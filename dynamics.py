@@ -170,7 +170,7 @@ func_A = lambdify(list(x_vec) + list(u_vec), A_sym, 'numpy')
 func_B = lambdify(list(x_vec) + list(u_vec), B_sym, 'numpy')
 
 
-dt = 1e-2   # discretization step -> changed from 1e-3 to be faster
+dt = 2e-2   # discretization step -> changed from 1e-3 to be faster
 ns = 4      # number of states
 ni = 2      # number of inputs
 
@@ -211,43 +211,6 @@ def continuous_dynamics(xx, uu):
     x_dot = np.concatenate((qdot, qddot))
     
     return x_dot
-
-def continuous_dynamics_old(xx, uu):
-    # Continuous-dynamics of gymnast
-    
-    xx = xx.squeeze()
-    uu = uu.squeeze()
-    
-    xx_next = np.zeros((ns,))
-    
-    # Add state to matrices
-    M_c = M_num.subs({theta1: xx[0], theta2: xx[1]})
-    C_c = C_num.subs({theta1: xx[0], theta2: xx[1], theta1_dot: xx[2], theta2_dot: xx[3]})
-    G_c = G_num.subs({theta1: xx[0], theta2: xx[1]})
-    
-    theta1_dotdot, theta2_dotdot  = sp.symbols('theta1_dotdot theta2_dotdot')
-    
-    theta_dotdot = sp.Matrix([theta1_dotdot, theta2_dotdot])
-    
-    eq = sp.Eq( M_c @ theta_dotdot + C_c @ sp.Matrix([xx[2], xx[3]])+ F_num @ sp.Matrix([xx[2], xx[3]]) + G_c, sp.Matrix([0, uu[1]]))
-    
-    sol = sp.solve(eq, [theta1_dotdot, theta2_dotdot])
-    
-    xx_next[:,] = np.array([xx[2], xx[3], sol[theta1_dotdot], sol[theta2_dotdot]])
-    
-    # print(xx_next)
-    # print(xx_next.shape)
-    
-    return xx_next
-    
-    #formula
-    # M_calc = np.array(M_num.subs({theta1: xx[0], theta2: xx[1]}), dtype=float).squeeze()
-    # C_calc = np.array(C_num.subs({theta1: xx[0], theta2: xx[1], theta1_dot: xx[2], theta2_dot: xx[3]}), dtype=float).squeeze()
-    # G_calc = np.array(G_num.subs({theta1: xx[0], theta2: xx[1]}), dtype=float).squeeze()
-    # F_calc = np.array(F_num, dtype=float).squeeze()
-    
-    # output = M_calc @ xx[2:] + C_calc @ xx[2:] + F_calc @ xx[2:] + G_calc
-
 
 ### Task 2 new ###
 

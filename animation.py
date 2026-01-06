@@ -30,7 +30,7 @@ def create_and_save_animation(x_opt, x_ref, T, x_e1, x_e2, l1=l1, l2=l2, filenam
     # --- PLOT EQUILIBRIUM POINTS (STATIC) ---
     e1_x_coords, e1_y_coords = get_link_positions(x_e1[0], x_e1[1], l1, l2)
     ax.plot(e1_x_coords[-1], e1_y_coords[-1], 'x', color='red', markersize=10, 
-            markeredgewidth=2, label='Final Position (e1)')
+            markeredgewidth=2, label='Initial Position (e1)')
     
     e2_x_coords, e2_y_coords = get_link_positions(x_e2[0], x_e2[1], l1, l2)
     ax.plot(e2_x_coords[-1], e2_y_coords[-1], 'P', color='green', markersize=10, 
