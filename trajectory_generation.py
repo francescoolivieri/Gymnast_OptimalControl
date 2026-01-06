@@ -5,7 +5,7 @@ import sympy as sp
 from scipy.optimize import root
 import copy
 
-T = 4.0 #Total time in secods
+T = 12.0 #Total time in secods
 N = int(T / dt) + 1 # Number of steps (including the initial state)
 nu = 2 #Dimension of control vector
 nx = 4 #Dimension of state vector
