@@ -3,10 +3,10 @@ import matplotlib.pyplot as plt
 from dynamics import *
 import sympy as sp
 from scipy.optimize import root
+import copy
 
-
-#T = 1.0 #Total time in secods
-#N = int(T / dt) + 1 # Number of steps (including the initial state)
+T = 10.0 #Total time in secods
+N = int(T / dt) + 1 # Number of steps (including the initial state)
 nu = 2 #Dimension of control vector
 nx = 4 #Dimension of state vector
 #N_opt = N * nx + (N-1) * nu #Total number of optimization values
@@ -249,7 +249,7 @@ def total_cost(x_traj, u_traj, x_ref, u_ref, Q, R, Q_T):
     
     return cost
 
-def newton_Algorithm(x0, x_ref, u_ref, max_iters, tol=1e-4, beta=0.7, c=0.3, gamma_0= 0.01):
+def newton_Algorithm(x0, x_ref, u_ref, max_iters, tol=1e-6, beta=0.7, c=0.5, gamma_0= 1):
     
     # Ensure u_ref has correct dimension
     if u_ref.shape[0] == x_ref.shape[0]:
@@ -261,7 +261,8 @@ def newton_Algorithm(x0, x_ref, u_ref, max_iters, tol=1e-4, beta=0.7, c=0.3, gam
     
  
     #Initialize a feasible trajectory given the input
-    u_traj = u_ref.copy()
+    #u_traj = u_ref.copy()
+    u_traj = np.zeros_like(u_ref)
     x_traj = simulate_open_loop(x0, u_traj)
     
     # Check dimensions match
@@ -270,7 +271,15 @@ def newton_Algorithm(x0, x_ref, u_ref, max_iters, tol=1e-4, beta=0.7, c=0.3, gam
 
     # Initial cost calculation
     cost_k = total_cost(x_traj, u_traj, x_ref, u_ref, Q, R, Q_T)
-        
+
+    # Logging initialization for plotting for the report
+    history = {
+        'cost': [cost_k],
+        'sigma_norm': [],
+        'x_trajs': [x_traj.copy()],
+        'sigmas': []
+    }
+          
     for k in range(max_iters):
         
         #Step 1
@@ -278,10 +287,14 @@ def newton_Algorithm(x0, x_ref, u_ref, max_iters, tol=1e-4, beta=0.7, c=0.3, gam
     
         # Stage lists
         A_list, B_list, Q_list, R_list, S_list, q_list, r_list, Q_T_block, q_T = build_stage_lists(x_traj, u_traj, x_ref, u_ref, lambda_seq)
-
+        
         #Riccati -> The second backward pass is within the function
         K, sigma, delta_J = calculate_K_and_sigma(A_list, B_list, Q_list, R_list, S_list, q_list, r_list, Q_T_block, q_T)
 
+        # Log sigma metrics
+        history['sigmas'].append(copy.deepcopy(sigma))
+        history['sigma_norm'].append(np.max(np.abs(sigma)))
+        
         gamma_i = gamma_0
         max_line_search_iters = 20
         success = False
@@ -304,6 +317,10 @@ def newton_Algorithm(x0, x_ref, u_ref, max_iters, tol=1e-4, beta=0.7, c=0.3, gam
         # Convergence check
         cost_reduction = cost_k - cost_new
         x_traj, u_traj, cost_k = x_new, u_new, cost_new
+
+        # Log iteration results
+        history['cost'].append(cost_k)
+        history['x_trajs'].append(x_traj.copy())
         
         # Print progress
         if k % 10 == 0:
@@ -313,18 +330,15 @@ def newton_Algorithm(x0, x_ref, u_ref, max_iters, tol=1e-4, beta=0.7, c=0.3, gam
             print(f"Converged at iteration {k}!")
             break
         
-    return x_traj, u_traj, K, sigma
+    return x_traj, u_traj, K, sigma, history
 
 # Choose initial state (e.g., start at first equilibrium)
 # x0 = x_e1.copy()
 
 # Run Newton newton_Algorithm(x0, x_ref, u_ref, max_iters, tol=1e-6, beta=0.7, c=0.5, gamma_0=1.0)
-# x_opt, u_opt, K_seq, sigma_seq = newton_Algorithm(x0, x_ref, u_ref, max_iters=50, tol=1e-6,  beta=0.7, c=0.5, gamma_0=1)
+# x_opt, u_opt, K_seq, sigma_seq, history = newton_Algorithm(x0, x_ref, u_ref, max_iters=50, tol=1e-6,  beta=0.7, c=0.5, gamma_0=1)
 
-def plot_results(t_ref, x_ref, u_ref, x_opt, u_opt):
-    """
-    Plot reference and optimal trajectories.
-    """
+def plot_results(t_ref, x_ref, u_ref, x_opt, u_opt, history):
     # Print results
     print("\n--- Optimal Trajectory Results ---")
     print(f"Final State (x_opt[-1]): {x_opt[-1]}")
@@ -362,9 +376,58 @@ def plot_results(t_ref, x_ref, u_ref, x_opt, u_opt):
     plt.legend(); plt.xlabel('Time [s]'); plt.ylabel('Torque')
     plt.tight_layout()
     
-    plt.savefig("figures/acrobot_traj.png")
+    plt.savefig("figures/acrobot_traj.png") 
     
+    plt.figure(figsize=(12, 5))
+    plt.subplot(1, 2, 1)
+    plt.semilogy(history['cost'], 'b-o')
+    plt.title('Cost along iterations')
+    plt.xlabel('Iteration'); plt.grid(True, which="both")
+
+    plt.subplot(1, 2, 2)
+    plt.semilogy(history['sigma_norm'], 'r-o')
+    plt.title('Norm of descent direction ($||\sigma||_\infty$)')
+    plt.xlabel('Iteration'); plt.grid(True, which="both")
     
+    plt.figure(figsize=(10, 4))
+    for i, x_h in enumerate(history['x_trajs']):
+        if i % 5 == 0 or i in [1, 2] or i == len(history['x_trajs'])-1:
+            plt.plot(t_ref, x_h[:, 0], alpha=0.3, label=f'Iter {i}')
+    plt.plot(t_ref, x_ref[:, 0], 'k--', linewidth=2, label='Desired')
+    plt.title('Evolution of $\ theta_1$ Trajectory')
+    plt.legend(); plt.ylabel('Angle [rad]'); plt.xlabel('Time [s]')
+
+    plt.figure(figsize=(10, 6))
+    # Plot specific iterations to see the 'shrinking' effect
+    iters_to_plot = [0, 1, 2, 4] 
+    colors = plt.cm.viridis(np.linspace(0, 1, len(iters_to_plot)))
+
+    for idx, i in enumerate(iters_to_plot):
+        if i < len(history['sigmas']):
+            sig = np.array(history['sigmas'][i])
+            plt.plot(t_ref[:-1], sig[:, 0], color=colors[idx], 
+                    label=f'Iteration {i}', alpha=0.8)
+
+    plt.title('Evolution of Armijo Descent Direction ($\sigma_t$) for $\ tau_1$')
+    plt.xlabel('Time [s]')
+    plt.ylabel('Correction Magnitude')
+    plt.legend()
+    plt.grid(True, alpha=0.3)
+    plt.show()
+
+    if len(history['sigmas']) > 0:
+        plt.figure(figsize=(10, 4))
+        first_sigma = np.array(history['sigmas'][0])
+        final_sigma = np.array(history['sigmas'][-1])
+        
+        plt.plot(t_ref[:-1], first_sigma[:, 0], label='Initial $\sigma$ (Iter 0)')
+        plt.plot(t_ref[:-1], final_sigma[:, 0], label='Final $\sigma$ (Converged)')
+        plt.title('Descent Direction (Armijo $\sigma$)')
+        plt.legend()
+        plt.ylabel('Control Correction')
+        plt.xlabel('Time [s]')
+    
+
 ###  TASK 2 START - HAVE TO REFACTOR THIS FILE WHEN DONE WITH FIRST TWO TASKS DEFINITIVELY  ####    
     
 def get_fully_actuated_ref():
@@ -375,7 +438,6 @@ def get_fully_actuated_ref():
     
     # Note: multiply ref torque to be more accurate (>effort for underactuated system)  
     return data["x"], np.multiply(u_ref, 2), data["time"] #6.5
-    
 
 # Old manual reference trials    
     
