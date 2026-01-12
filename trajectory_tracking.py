@@ -1,10 +1,165 @@
 import numpy as np
+import casadi as ca
 from trajectory_generation import *
+from scipy.linalg import solve_discrete_are
 
 #Regulator Parameters
 Q_reg = np.diag([100.0, 100.0, 10.0, 10.0])
 R_Reg = np.diag([1.0, 1.0])
 Q_T_reg = Q_reg * 2.0 #the final position is twice as important as the intermediate position
+
+
+def solve_mpc_tracking(x0, x_ref, u_ref, T):
+    
+    T_hor = 76 # mpc at half T horizon
+    dt = 2e-2
+    N = x_ref.shape[0]
+    
+    #Linearize about the generated trajectory(x_ref, u_ref)
+    A_list = []
+    B_list = []
+    
+    for t in range(N -1):
+        Ac, Bc = Calculate_A_B_matrixes(x_ref[t], u_ref[t])
+        Ad, Bd = discretize_linearization(Ac, Bc, dt)
+        
+        A_list.append(Ad)
+        B_list.append(Bd)
+    
+    x_mpc = np.zeros((ns, T_hor, T))
+    #u_mpc = np.zeros((nu, T_hor, T))
+        
+    x_real = np.zeros(x_ref.shape)    
+    u_real = np.zeros(u_ref.shape)
+    
+    x_real[0, :] = x0
+        
+    # Desired final equilibrium (used as padding)    
+    x_f = np.array([np.pi, 0, 0, 0])
+    u_f = np.array([0, 0])
+    A_f, B_f = discretize_linearization(*Calculate_A_B_matrixes(x_f, u_f), dt)
+
+    # Stage costs
+    Q = np.diag([120.0, 100.0, 0.0001 , 0.0001])  
+    R = np.diag([1e-6, 10.0])   
+    Q_T = compute_P_inf(A_f, B_f, Q, R)
+
+    for t in range(T-1):
+        
+        # Measured state at time t
+        x_t_mpc = x_real[t, :]
+        
+        # Solve MPC at
+        u_real[t, :], x_tracked, u_tracked = solver_mpc(x_t_mpc, x_ref[:T_hor,:], u_ref[:T_hor,:], A_list[:T_hor], B_list[:T_hor], Q, R, Q_T, T_hor)
+        
+        # Measure state using MPC result
+        x_real[t+1, :] = dynamics(x_real[t, :], u_real[t, :]) 
+        
+        # Print progress every 10 iterations
+        if t % 10 == 0:
+            error = np.linalg.norm(x_real[t] - x_ref[t])
+            print(f"t={t:3d}: ||error||={error:.4f}, x={x_real[t, :2]}, u={u_real[t,1]:.3f}")
+
+        # Prepare for next iteration (sliding window)      
+        x_ref = np.vstack([x_ref[1:, :], x_f])
+        u_ref = np.vstack([u_ref[1:, :], u_f])
+        A_list = A_list[1:] + [A_f]
+        B_list = B_list[1:] + [B_f]
+        
+        
+    return x_real, u_real
+    
+
+def compute_P_inf(A, B, Q, R):
+    P = Q
+    
+    # simulating infinite horizon
+    max_iter = 1000
+    tol = 1e-6
+    
+    for i in range(max_iter):
+        P_prev = P
+        
+        aux1 = R + B.T @ P @ B
+        aux2 = B.T @ P @ A
+        
+        K = -np.linalg.inv(aux1) @ aux2             # Calculate gain
+        P = Q + (A.T @ P @ A) + (A.T @ P @ B) @ K   # Riccati equation
+        
+        # Check if P has stopped changing
+        if np.abs(P - P_prev).max() < tol:
+            return P
+            
+    print("P_inf did not converge!!!")
+    return P
+
+
+def solver_mpc(x0, x_ref, u_ref, A_list, B_list, Q, R, Q_T, T_pred):
+    
+    Q = ca.DM(Q)
+    R = ca.DM(R)
+    Q_T = ca.DM(Q_T)
+    x0 = ca.DM(x0)
+    
+    opti = ca.Opti()
+    
+    #T_pred = x_ref.shape[0]
+    
+    X = opti.variable(ns, T_pred)
+    U = opti.variable(nu, T_pred)
+      
+    cost = 0
+    
+    opti.subject_to( X[:, 0] == x0 )
+    
+    for t in range(T_pred-1):
+        A = ca.DM(A_list[t])
+        B = ca.DM(B_list[t])
+        
+        xt = X[:, t]
+        ut = U[:, t]
+        
+        xt_des = ca.DM(x_ref[t, :])
+        ut_des = ca.DM(u_ref[t, :])
+        xt1_des = ca.DM(x_ref[t + 1, :])
+        
+        # quadratic cost
+        cost += ca.mtimes([(xt-xt_des).T, Q, (xt-xt_des)]) + ca.mtimes([(ut-ut_des).T, R, (ut-ut_des)])
+
+        # dynamics constraint
+        opti.subject_to(X[:, t + 1] == xt1_des + A @ (xt - xt_des) + B @ (ut - ut_des))
+    
+    xt_des = ca.DM(x_ref[-1, :])
+    
+    cost+= ca.mtimes([(X[:, -1]-xt_des).T, Q_T, (X[:, -1]-xt_des)])
+    
+    opti.minimize(cost)
+
+    # Warm-start with reference trajectory
+    opti.set_initial(X, x_ref.T)
+    opti.set_initial(U, u_ref.T)
+    
+    ipopt_opts = {
+        "ipopt.print_level": 0,
+        "print_time": 0,
+        "ipopt.tol": 1e-6,
+        "ipopt.max_iter": 100,
+    }
+    opti.solver("ipopt", ipopt_opts)
+    
+    try:
+        sol = opti.solve()
+    except RuntimeError as e:
+        print("Attention! mpc solver failed:", e)
+        exit()
+    
+    U0 = sol.value(U[:, 0])
+    X_opt = sol.value(X)
+    U_opt = sol.value(U)
+
+    
+    return np.asarray(U0), np.asarray(X_opt).T, np.asarray(U_opt).T
+
 
 def solve_LQR_tracking(x_opt, u_opt):
     
@@ -27,13 +182,14 @@ def solve_LQR_tracking(x_opt, u_opt):
         A = A_list[t]
         B = B_list[t]
         
-        aux1 = B.T @ P @ B
+        aux1 = R_Reg + B.T @ P @ B
         aux2 = B.T @ P @ A
         
-        K_reg[t] = -np.linalg.inv(R_Reg + aux1) @ aux2
+        K_reg[t] = -np.linalg.inv(aux1) @ aux2
         P = Q_reg + (A.T @ P @ A) + (A.T @ P @ B) @ K_reg[t]
         
     return K_reg
+
 
 def simulate_tracking(x_opt, u_opt, K_reg, x0_perturbed):
     N_steps = x_opt.shape[0]
@@ -46,6 +202,7 @@ def simulate_tracking(x_opt, u_opt, K_reg, x0_perturbed):
         u_track[t] = u_opt[t] + K_reg[t] @ (x_track[t] - x_opt[t])
         x_track[t+1] = dynamics(x_track[t], u_track[t])
     return x_track, u_track
+
 
 def LQR_tracking(x_opt, u_opt):
     

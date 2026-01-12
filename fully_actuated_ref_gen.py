@@ -96,7 +96,7 @@ def solve_swing_up_trajectory(T=10.0, N=500 ):
     opti.subject_to(X[:, 0] == x_init)  # Initial state constraint
     
     # Add pumping
-    oscillation_duration = 0.4 # 40% of trajectory
+    oscillation_duration = 0.45 # 45% of trajectory
     n_oscillations = 3
     
     for i in range(1, n_oscillations + 1):
@@ -112,7 +112,7 @@ def solve_swing_up_trajectory(T=10.0, N=500 ):
         opti.subject_to(X[0, t_osc] == target_theta1)
         
         # Keep theta2 relatively aligned during pumping
-        #opti.subject_to(opti.bounded(-np.pi/10, X[1, t_osc], np.pi/10))
+        opti.subject_to(opti.bounded(-np.pi/10, X[1, t_osc], np.pi/10))
     
 
     # Add dynamics constraints (RK4)
@@ -165,9 +165,9 @@ def solve_swing_up_trajectory(T=10.0, N=500 ):
     
    
     opts = {
-        'ipopt.print_level': 5,        # Verbosity level (0-12)
-        'ipopt.max_iter': 3000,        # Maximum iterations
-        'ipopt.tol': 1e-6,             # Convergence tolerance
+        'ipopt.print_level': 5,        
+        'ipopt.max_iter': 3000,       
+        'ipopt.tol': 1e-6,             
     }
     opti.solver('ipopt', opts)
     
@@ -253,7 +253,8 @@ def main():
     
     # Trajectory generation parameters
     T = 10.0            # Total time [seconds]
-    N = 500             # Discretization points
+    dt = 2e-2
+    N = int(T/dt)             # Discretization points
     
     # Solve optimal control problem
     x_traj, u_traj, time = solve_swing_up_trajectory(T, N)
