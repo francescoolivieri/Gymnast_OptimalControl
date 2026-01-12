@@ -249,7 +249,51 @@ def total_cost(x_traj, u_traj, x_ref, u_ref, Q, R, Q_T):
     
     return cost
 
-def newton_Algorithm(x0, x_ref, u_ref, max_iters, tol=1e-6, beta=0.7, c=0.5, gamma_0= 1):
+def plot_armijo_line_search(iteration, x_traj, u_traj, K, sigma, cost_current, x_ref, u_ref, delta_J, gamma_accepted, stepsizes_tested, costs_tested, c=0.5, beta=0.7):
+    
+    # Generate a range of step sizes 
+    max_step = max(1.25, max(stepsizes_tested) * 1.3 if stepsizes_tested else 1.25)
+    steps = np.linspace(0, max_step, 200)
+    costs = np.zeros(len(steps))
+    
+    # Compute cost along the descent direction
+    for ii, step in enumerate(steps):
+        x_new, u_new = forward_closed_loop_update(x_traj, u_traj, K, sigma, gamma=step)
+        costs[ii] = total_cost(x_new, u_new, x_ref, u_ref, Q, R, Q_T)
+    
+    plt.figure(f'Armijo Line Search - Iteration {iteration}', figsize=(12, 7))
+    plt.clf()
+    
+    # Plot actual cost along search direction (blue line)
+    plt.plot(steps, costs, color='blue', linewidth=2.5, label=r'$J(x_k + \gamma \cdot \delta x, u_k + \gamma \cdot \delta u)$', alpha=0.8)
+    
+    # Plot linear approximation (first-order Taylor expansion) (red line)
+    # J(new) ≈ J(current) + gamma * directional_derivative
+    linear_approx = cost_current + delta_J * steps
+    plt.plot(steps, linear_approx, color='red', linewidth=2.5, linestyle='-', label=r'$J_k + \gamma \cdot \nabla J^T \delta$', alpha=0.8)
+    
+    # Plot Armijo condition line (green dashed)
+    # Armijo accepts if: J(new) < J(current) + c * gamma * directional_derivative
+    armijo_line = cost_current + c * delta_J * steps
+    plt.plot(steps, armijo_line, color='green', linestyle='--', linewidth=2.5, label=rf'$J_k + c \cdot \gamma \cdot \nabla J^T \delta$ (c={c})', alpha=0.8)
+    
+    # Mark tested stepsizes from Armijo procedure (orange stars)
+    if stepsizes_tested and costs_tested:
+        plt.scatter(stepsizes_tested, costs_tested, marker='*', s=150, color='orange', edgecolor='black', linewidth=1.5, zorder=5, label=rf'Tested stepsizes ($\beta$={beta})')
+        
+        # Mark the accepted stepsize (large red circle)
+        plt.scatter(gamma_accepted, costs_tested[-1], marker='o', s=200, color='red', edgecolor='black', linewidth=2.5, zorder=6, label=rf'Accepted: $\gamma$={gamma_accepted:.4f}')
+    
+    plt.xlabel(r'Step Size $\gamma$', fontsize=14)
+    plt.ylabel('Cost Value J', fontsize=14)
+    plt.title(f'Armijo Line Search - Iteration {iteration}\n' + f'Current Cost = {cost_current:.4f}, Expected Reduction = {delta_J:.2e}', fontsize=15)
+    plt.grid(True, alpha=0.3)
+    plt.legend(fontsize=12, loc='best')
+    plt.xlim(0, max_step)
+    plt.tight_layout()
+    plt.show()
+
+def newton_Algorithm(x0, x_ref, u_ref, max_iters, tol=1e-6, beta=0.7, c=0.5, gamma_0=1, plot_armijo_iters=10):
     
     # Ensure u_ref has correct dimension
     if u_ref.shape[0] == x_ref.shape[0]:
@@ -299,9 +343,17 @@ def newton_Algorithm(x0, x_ref, u_ref, max_iters, tol=1e-6, beta=0.7, c=0.5, gam
         max_line_search_iters = 20
         success = False
         
+        # Track stepsizes and costs for Armijo plot
+        stepsizes_tested = []
+        costs_tested = []
+        
         for i in range(max_line_search_iters):
             x_new, u_new = forward_closed_loop_update(x_traj, u_traj, K, sigma, gamma=gamma_i)
             cost_new = total_cost(x_new, u_new, x_ref, u_ref, Q, R, Q_T)
+            
+            # Store for plotting
+            stepsizes_tested.append(gamma_i)
+            costs_tested.append(cost_new)
             
             # cost_new < current_cost + alpha * step_size * directional_derivative
             if cost_new < cost_k + c * gamma_i * delta_J:
@@ -313,6 +365,12 @@ def newton_Algorithm(x0, x_ref, u_ref, max_iters, tol=1e-6, beta=0.7, c=0.5, gam
         if not success:
             print(f"Iteration {k}: Line search failed to find sufficient decrease.")
             break
+        
+        # Plot Armijo line search for first iterations or specific iterations
+        if k < plot_armijo_iters and (k % 2 == 0 or k < 3):
+            plot_armijo_line_search(k, x_traj, u_traj, K, sigma, cost_k, 
+                                   x_ref, u_ref, delta_J, gamma_i, 
+                                   stepsizes_tested, costs_tested, c, beta)
             
         # Convergence check
         cost_reduction = cost_k - cost_new
@@ -428,189 +486,14 @@ def plot_results(t_ref, x_ref, u_ref, x_opt, u_opt, history):
         plt.xlabel('Time [s]')
     
 
-###  TASK 2 START - HAVE TO REFACTOR THIS FILE WHEN DONE WITH FIRST TWO TASKS DEFINITIVELY  ####    
     
 def get_fully_actuated_ref():
     
-    data = np.load("fully_actuated_trajectory.npz")
+    data = np.load("trajectories_npz/fully_actuated_trajectory.npz")
     u_ref = np.zeros(data["u"].shape)
     u_ref[:, 1] = data["u"][:, 1]  # Acrobot: tau1=0, tau2=elbow torque from reference
     
     # Note: multiply ref torque to be more accurate (>effort for underactuated system)  
     return data["x"], np.multiply(u_ref, 2), data["time"] #6.5
 
-# Old manual reference trials    
-    
-def get_poly5_coefficients(t_i, p_i, pdot_i, pdotdot_i, t_f, p_f, pdot_f, pdotdot_f):
-    """
-    Computes the coefficients of the poly-5 given starting and ending conditions.
-    For each point it's requested: time, position, velocity, acceleration. (in that order)
-    """
-    
-    b = np.array([p_i, pdot_i, pdotdot_i, p_f, pdot_f, pdotdot_f])
-    
-    A = np.array([
-        [1, t_i, t_i**2,   t_i**3,    t_i**4,    t_i**5],
-        [0, 1,  2*t_i,    3*t_i**2,  4*t_i**3,  5*t_i**4],
-        [0, 0,  2,       6*t_i,     12*t_i**2, 20*t_i**3],
-        [1, t_f, t_f**2,   t_f**3,    t_f**4,    t_f**5],
-        [0, 1,  2*t_f,    3*t_f**2,  4*t_f**3,  5*t_f**4],
-        [0, 0,  2,       6*t_f,     12*t_f**2, 20*t_f**3]
-    ])
-    
-    return np.linalg.solve(A, b)
-
-def calculate_poly5(coeffs, timeline):
-    """
-    Given coefficients (6) and the time to evaluate in the 5th-grade polynomial,
-    it returns the corresponding position, velocity, and acceleration at each time instant
-    """
-    p = []
-    p_dot = []
-    p_dotdot = []
-    
-    for t in timeline:
-
-        x = np.array([1, t, t**2, t**3, t**4, t**5])
-        
-        x_dot = np.array([0, 1, 2*t, 3*t**2, 4*t**3, 5*t**4])
-        
-        x_dotdot = np.array([0, 0, 2, 6*t, 12*t**2, 20*t**3])
-        
-        # evaluating polinomial in t
-        p.append( coeffs @ x )    
-        p_dot.append( coeffs @ x_dot )    
-        p_dotdot.append( coeffs @ x_dotdot )    
-    
-    return p, p_dot, p_dotdot
-    
-    
-
-def get_target_trajectory(plot=False):
-    
-    # u_targets = [
-    #     np.array([0, 4.5]),    # Positive symmetric
-    #     np.array([0, -2.5]),   # Mixed 1
-    # ]
-    # theta_guess = (0.0, 0.0)
-    # x_e1, u_e1 = compute_equilibrium(u_targets[0], theta_guess)
-    # x_e2, u_e2 = compute_equilibrium(u_targets[1], theta_guess)
-    # theta1_checkpoints = [0, x_e1[0], x_e2[0]]
-    # theta2_checkpoints = [0, x_e1[1], x_e2[1]]
-    # timings =  [0, 1.0, 2.0]
-
-
-    # Setting constraints for the trajectory
-    theta1_checkpoints = [
-        0,              # t=6:  End of pumping, still down
-        -np.pi/4,        # t=10: Start rising
-        np.pi,          # t=18: Reach inverted position
-        np.pi,          # t=21: Hold briefly
-    ]
-    
-    theta2_checkpoints = [
-        0,              # t=6:  End of pumping (must match sinusoid end!)
-        0,              # t=10: Align for swing-up
-        0,              # t=14: Stay aligned
-        0,              # t=18: Arrive at top, aligned
-        0,              # t=21: Hold
-    ]
-    
-    
-    timings = [0.0, 2.0, 4.0, 10.0]
-    
-    # theta1_checkpoints = [0, np.pi]
-    # theta2_checkpoints = [0, 0]
-    # timings =  [0, 1.0]
-    
-    if len(theta1_checkpoints) != len(timings) and len(theta1_checkpoints) == len(theta2_checkpoints):
-        print(f"Length of trajectoris")
-        exit()
-    
-    vel_start = 0.0     
-    vel_end   = 0.0      
-    acc_start = 0.0      
-    acc_end   = 0.0     
-
-    timeline = np.linspace(timings[0], timings[-1], 500)
-
-    theta1_positions = [] 
-    theta1_velocities = []    
-    
-    theta2_positions = [] 
-    theta2_velocities = [] 
-    theta2_accelerations = []    
-
-    for i in range(len(theta1_checkpoints)-1):
-        
-        ### THETA 1 ###
-        pos_start = theta1_checkpoints[i]
-        pos_end = theta1_checkpoints[i+1]
-        
-        t_start = timings[i]
-        t_end = timings[i+1]
-        
-        coeffs = get_poly5_coefficients(t_start, pos_start, vel_start, acc_start, t_end, pos_end, vel_end, acc_end)
-
-        # Include the starting time and ending time at the beginning, in the other cases I include only the 
-        # last time step. This is useful to not introduce duplicates.
-        if i == 0: 
-            theta1_steps, theta1_dot_steps, _ = calculate_poly5(coeffs, [t for t in timeline if (t>=t_start and t<=t_end)])
-        else:
-            theta1_steps, theta1_dot_steps, _ =  calculate_poly5(coeffs, [t for t in timeline if (t>t_start and t<=t_end)])
-    
-        theta1_positions.extend( theta1_steps )
-        theta1_velocities.extend( theta1_dot_steps )
-        
-        # if i == 0:
-        #     theta1_velocities.extend( np.multiply(theta1_dot_steps, 15) )
-        # else:
-        #     theta1_velocities.extend( np.multiply(theta1_dot_steps, 5) )
-    
-        ### THETA 2 ###
-        pos_start = theta2_checkpoints[i]
-        pos_end = theta2_checkpoints[i+1]
-        
-        t_start = timings[i]
-        t_end = timings[i+1]
-        
-        coeffs = get_poly5_coefficients(t_start, pos_start, vel_start, acc_start, t_end, pos_end, vel_end, acc_end)
-
-        if i == 0:
-            theta2_steps, theta2_dot_steps, theta2_dotdot_steps = calculate_poly5(coeffs, [t for t in timeline if (t>=t_start and t<=t_end)]) 
-        else:
-            theta2_steps, theta2_dot_steps, theta2_dotdot_steps  = calculate_poly5(coeffs, [t for t in timeline if (t>t_start and t<=t_end)]) 
-
-        theta2_positions.extend(theta2_steps)
-        theta2_velocities.extend(theta2_dot_steps)
-        theta2_accelerations.extend(theta2_dotdot_steps) # Our simplified torque
-    
-    
-    if plot:
-        plt.figure(figsize=(10,5))
-        plt.subplot(3, 1, 1)
-        plt.plot(timeline, theta1_positions)
-        plt.ylabel("Theta_1 [rad]"); plt.title("Reference Trajectory")
-        plt.grid(True)
-        
-        plt.subplot(3, 1, 2)
-        plt.plot(timeline, theta2_positions)
-        plt.xlabel("Time [t]"); plt.ylabel("Theta_2 [rad]")
-        plt.grid(True)
-        
-        plt.subplot(3, 1, 3)
-        plt.plot(timeline, theta1_velocities)
-        plt.xlabel("Time [t]"); plt.ylabel("Tau_2 [rad]")
-        plt.grid(True)
-        
-        plt.tight_layout()
-        plt.show()
-    
-    x_ref = np.zeros((len(timeline), 4))
-    x_ref[:, 0] = theta1_positions ; x_ref[:, 1] = theta2_positions ; x_ref[:, 2] = theta1_velocities ; x_ref[:, 3] = theta2_velocities
-    
-    u_ref = np.zeros((len(timeline), 2))
-    u_ref[:, 1] = np.multiply(theta1_velocities, 10) # we need bigger effort on u
-     
-    return x_ref, u_ref[:-1], timeline
 

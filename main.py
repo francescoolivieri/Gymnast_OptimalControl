@@ -43,7 +43,8 @@ def task_2():
         x0, x_ref, u_ref, 
         max_iters=5000, 
         tol=1e-4, 
-        gamma_0=0.01 
+        gamma_0=0.02,
+        plot_armijo_iters=5
     )
     
     # Save trajectory for later use
@@ -173,6 +174,7 @@ def task_4():
     plt.tight_layout()
     
     plt.show()
+    plt.savefig
     
     return
 
