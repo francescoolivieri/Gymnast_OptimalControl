@@ -4,14 +4,14 @@ from trajectory_generation import *
 from scipy.linalg import solve_discrete_are
 
 #Regulator Parameters
-Q_reg = np.diag([100.0, 100.0, 10.0, 10.0])
-R_Reg = np.diag([1.0, 1.0])
-Q_T_reg = Q_reg * 2.0 #the final position is twice as important as the intermediate position
+# Q_reg = np.diag([100.0, 100.0, 10.0, 10.0])
+# R_Reg = np.diag([1.0, 1.0])
+# Q_T_reg = Q_reg * 2.0 #the final position is twice as important as the intermediate position
 
 
 def solve_mpc_tracking(x0, x_ref, u_ref, T):
     
-    T_hor = 30 # mpc at half T horizon
+    T_hor = 100
     dt = 2e-2
     N = x_ref.shape[0]
     
@@ -41,7 +41,7 @@ def solve_mpc_tracking(x0, x_ref, u_ref, T):
 
     # Stage costs
     Q = np.diag([120.0, 100.0, 0.0001 , 0.0001])  
-    R = np.diag([1e-6, 10.0])   
+    R = np.diag([1e-6, 10.0])  
     Q_T = compute_P_inf(A_f, B_f, Q, R)
 
     
@@ -49,9 +49,10 @@ def solve_mpc_tracking(x0, x_ref, u_ref, T):
         
         # Note: use sliding window no padding so index 0 is always the current reference at time t.
         x_t_mpc = x_real[t, :] - x_ref[0, :]
+        u_ref_horizon = u_ref[:T_hor]
         
         # Solve MPC at
-        u_t_mpc, x_tracked, u_tracked = solver_mpc(x_t_mpc, A_list[:T_hor], B_list[:T_hor], Q, R, Q_T, T_hor)
+        u_t_mpc, x_tracked, u_tracked = solver_mpc(x_t_mpc, A_list[:T_hor], B_list[:T_hor], Q, R, Q_T, T_hor, u_ref_horizon)
         
         # Apply correction around the current feedforward input
         u_real[t, :] = u_ref[0, :] + u_t_mpc
@@ -74,7 +75,7 @@ def solve_mpc_tracking(x0, x_ref, u_ref, T):
     
 
 
-def solver_mpc(x0, A_list, B_list, Q, R, Q_T, T_pred):
+def solver_mpc(x0, A_list, B_list, Q, R, Q_T, T_pred, u_ref = None):
     
     Q = ca.DM(Q)
     R = ca.DM(R)
@@ -88,6 +89,12 @@ def solver_mpc(x0, A_list, B_list, Q, R, Q_T, T_pred):
       
     cost = 0
     
+    test_constraints = True
+    
+    if u_ref is not None and test_constraints:
+        U_ref = ca.DM(u_ref).T
+        tau_max = 18
+    
     opti.subject_to( X[:, 0] == x0 )
     
     for t in range(T_pred-1):
@@ -97,11 +104,19 @@ def solver_mpc(x0, A_list, B_list, Q, R, Q_T, T_pred):
         xt = X[:, t]
         ut = U[:, t]
         
+        if u_ref is not None and test_constraints:
+            u_ref_t = U_ref[:, t]
+        #opti.subject_to(ut <= 11.0)
+        
         # quadratic cost
         cost += ca.mtimes([xt.T, Q, xt]) + ca.mtimes([ut.T, R, ut])
 
         # dynamics constraint
         opti.subject_to(X[:, t + 1] == A @ xt + B @ ut)
+
+        if test_constraints:
+            opti.subject_to( ut + u_ref_t <= tau_max )
+            opti.subject_to( ut + u_ref_t >= -tau_max )
     
     
     cost+= ca.mtimes([X[:, -1].T, Q_T, X[:, -1]])
@@ -112,7 +127,7 @@ def solver_mpc(x0, A_list, B_list, Q, R, Q_T, T_pred):
         "ipopt.print_level": 0,
         "print_time": 0,
         "ipopt.tol": 1e-6,
-        "ipopt.max_iter": 100,
+        "ipopt.max_iter": 1000,
     }
     opti.solver("ipopt", ipopt_opts)
     
@@ -128,7 +143,6 @@ def solver_mpc(x0, A_list, B_list, Q, R, Q_T, T_pred):
 
     
     return np.asarray(U0), np.asarray(X_opt).T, np.asarray(U_opt).T
-
 
 
 
@@ -154,6 +168,9 @@ def compute_P_inf(A, B, Q, R):
             
     print("P_inf did not converge!!!")
     return P
+
+
+
 
 def solve_LQR_tracking(x_opt, u_opt):
     

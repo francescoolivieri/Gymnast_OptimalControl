@@ -60,9 +60,9 @@ def task_2():
     
     print("Generating animation...")    
     create_and_save_animation(
-        x_opt=x_opt,      # Your optimal trajectory
-        x_ref=x_ref,       # Your reference trajectory (the ghost)
-        T=t_ref[-1],       # The total time (scalar: last time value)
+        x_opt=x_opt,      
+        x_ref=x_ref,       
+        T=t_ref[-1],       
         x_e1=x_ref[0],     # Initial state
         x_e2=x_ref[-1],    # Final state
         filename='figures/acrobot_swingup_newton_algorithm.gif'
@@ -128,36 +128,32 @@ def task_4():
     data = np.load("trajectories_npz/acrobot_optimal_trajectory.npz")
     x_ref, u_ref, t_ref = data["x"], data["u"], data["t"]
     
-    print(f"Last u: {u_ref[-1,:]}")
+    test_disturbances = [0.2, 0.3]
     
+    # Actual initial state from the reference trajectory
+    x0 = x_ref[0].copy()
     
-    # Use the actual initial state from the reference trajectory
-    x0 = x_ref[0].copy() + 0.2
-    
-    x_opt, u_opt = tt.solve_mpc_tracking(x0, x_ref, u_ref, len(t_ref))
-    
-    # Print results
-    print("\n--- Optimal Trajectory Results ---")
-    print(f"Final State (x_opt[-1]): {x_opt[-1]}")
-    print(f"Final Input (u_opt[-1]): {u_opt[-1]}")
-    
+    for disturbance in test_disturbances:
+        x0_test = x0 + disturbance
+        
+        # MPC tracking
+        x_opt, u_opt = tt.solve_mpc_tracking(x0_test, x_ref, u_ref, len(t_ref))
+        
+        # Print results
+        print("\n Optimal Trajectory Results: ")
+        print(f"Final State (x_opt[-1]): {x_opt[-1]}")
+        print(f"Final Input (u_opt[-1]): {u_opt[-1]}")
+        
+        plot_tracking(x_ref, u_ref, x_opt, u_opt, t_ref, f"figures/mpc/tracking_dx_{disturbance}")    
+        
+    return
+
+def plot_tracking(x_ref, u_ref, x_opt, u_opt, t_ref, name="figures/unnamed"):
     # For plotting controls, use t_ref[:-1] since controls have N-1 elements
     t_control = t_ref[:-1]
     
-    # Plot 1: Reference Trajectory
-    plt.figure(figsize=(10,5))
-    plt.subplot(2,1,1)
-    plt.plot(t_ref, x_ref[:,0], label='theta1 (ref)')
-    plt.plot(t_ref, x_ref[:,1], label='theta2 (ref)')
-    plt.ylabel('Angles [rad]'); plt.legend()
-    plt.subplot(2,1,2)
-    plt.plot(t_control, u_ref[:,0], label='tau1 (ref)')
-    plt.plot(t_control, u_ref[:,1], label='tau2 (ref)')
-    plt.xlabel('Time [s]'); plt.ylabel('Torque'); plt.legend()
-    plt.tight_layout()
-
-    # Plot 2: Optimal vs. Reference Trajectory
-    plt.figure(figsize=(10,6))
+    # Trajectory tracking
+    plt.figure(figsize=(20,10))
     plt.subplot(2,1,1)
     plt.plot(t_ref, x_opt[:,0], label='theta1 (opt)')
     plt.plot(t_ref, x_opt[:,1], label='theta2 (opt)')
@@ -172,13 +168,17 @@ def task_4():
     plt.plot(t_control, u_ref[:,1], '--', label='tau2 (ref)')
     plt.legend(); plt.xlabel('Time [s]'); plt.ylabel('Torque')
     plt.tight_layout()
+    plt.savefig(name + "_ref.png")
     
+    # Norm error
+    plt.figure(figsize=(10,5))
+    plt.plot(t_ref, np.linalg.norm(x_opt - x_ref, axis=1), label='State error (norm)')
+    control_error_padded = np.append(np.abs(u_opt[:, 1] - u_ref[:,1]), np.nan)
+    plt.plot(t_ref, control_error_padded, label='Control error (norm)')
+    plt.xlabel('Time [s]'); plt.ylabel('Error Magnitude'); plt.legend()
+    
+    plt.savefig(name + "_err.png")
     plt.show()
-    plt.savefig
-    
-    return
-
-
 
 
 if __name__ == '__main__':

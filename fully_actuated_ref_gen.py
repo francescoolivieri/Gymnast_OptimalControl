@@ -17,17 +17,9 @@ f1 = 1.0
 f2 = 1.0      
 
 
-# ============================================================================
-# CONTINUOUS DYNAMICS (CasADi version of dynamics from dynamics.py)
-# ============================================================================
 def acrobot_dynamics_casadi(x, u):
     """
     Continuous dynamics for FULLY actuated acrobot (both joints controlled).
-    
-    Returns: x_dot = [theta1_dot, theta2_dot, theta1_ddot, theta2_ddot]
-    
-    Dynamics equation: M(q) * qddot + C(q, qdot) * qdot + F * qdot + G(q) = tau
-    Solved as: qddot = M^(-1) * (tau - C*qdot - F*qdot - G)
     """
     # states
     theta1 = x[0]
@@ -133,12 +125,6 @@ def solve_swing_up_trajectory(T=10.0, N=500 ):
         # applying dynamics!
         opti.subject_to(X[:, k+1] == x_next)
     
-    # additional boundaries
-    tau_max = 20.0  # Max torque 
-    vel_max = 15.0  # Max angular velocity
-    
-    opti.subject_to(opti.bounded(-tau_max, U, tau_max))
-    opti.subject_to(opti.bounded(-vel_max, X[2:4, :], vel_max))
     
     # Cost function
     cost = 0
@@ -171,15 +157,6 @@ def solve_swing_up_trajectory(T=10.0, N=500 ):
     }
     opti.solver('ipopt', opts)
     
-    # ========================================================================
-    # STEP 9: Provide initial guess
-    # ========================================================================
-    # Good initial guess helps solver converge faster
-    # Use linear interpolation between initial and final states
-    # for i in range(4):
-    #     opti.set_initial(X[i, :], np.linspace(x_init[i], x_final[i], N+1))
-    # opti.set_initial(U, np.zeros((2, N)))
-    
     
     try:
         sol = opti.solve()
@@ -194,56 +171,26 @@ def solve_swing_up_trajectory(T=10.0, N=500 ):
         return x_traj, u_traj, time
         
     except Exception as e:
-        print(f"✗ OPTIMIZATION FAILED: {e}")
+        print(f"FAILED: {e}")
         exit()
         
 
 
 def plot_trajectory(time, x_traj, u_traj, save_path='figures/fully_actuated_acrobot_trajectory.png'):
-    """
-    Plot state and control trajectories.
-    
-    Similar to plot_results() in trajectory_generation.py
-    """
-    fig, axes = plt.subplots(3, 2, figsize=(12, 10))
-    
-    # State labels
-    state_labels = [
-        r'$\theta_1$ [rad]', 
-        r'$\theta_2$ [rad]', 
-        r'$\dot{\theta}_1$ [rad/s]', 
-        r'$\dot{\theta}_2$ [rad/s]'
-    ]
-    
-    # Plot states
-    for i in range(4):
-        row = i // 2
-        col = i % 2
-        axes[row, col].plot(time, x_traj[:, i], 'b-', linewidth=2)
-        axes[row, col].set_xlabel('Time [s]')
-        axes[row, col].set_ylabel(state_labels[i])
-        axes[row, col].grid(True, alpha=0.3)
-        axes[row, col].axhline(y=0, color='k', linestyle='--', alpha=0.3)
-        
-        # Add target line for angles
-        if i == 0:  # theta1 target = π
-            axes[row, col].axhline(y=np.pi, color='r', linestyle='--', alpha=0.5, label='Target')
-            axes[row, col].legend()
-    
-    # Plot controls (note: N controls vs N+1 states)
+    # time[:-1] since controls have N-1 elements
     time_u = time[:-1]
-    control_labels = [r'$\tau_1$ [N·m]', r'$\tau_2$ [N·m]']
     
-    for i in range(2):
-        axes[2, i].plot(time_u, u_traj[:, i], 'r-', linewidth=2)
-        axes[2, i].set_xlabel('Time [s]')
-        axes[2, i].set_ylabel(control_labels[i])
-        axes[2, i].grid(True, alpha=0.3)
-        axes[2, i].axhline(y=0, color='k', linestyle='--', alpha=0.3)
-    
+    plt.figure(figsize=(10,5))
+    plt.subplot(2,1,1)
+    plt.plot(time, x_traj[:,0], label='theta1')
+    plt.plot(time, x_traj[:,1], label='theta2')
+    plt.ylabel('Angles [rad]'); plt.legend()
+    plt.subplot(2,1,2)
+    plt.plot(time_u, u_traj[:,0], label='tau1')
+    plt.plot(time_u, u_traj[:,1], label='tau2')
+    plt.xlabel('Time [s]'); plt.ylabel('Torque'); plt.legend()
     plt.tight_layout()
-    plt.savefig(save_path, dpi=150, bbox_inches='tight')
-    print(f"\n✓ Plot saved: {save_path}")
+    plt.savefig(save_path)
     plt.show()
 
 
