@@ -270,7 +270,7 @@ def plot_armijo_line_search(iteration, x_traj, u_traj, K, sigma, cost_current, x
     # Plot linear approximation (first-order Taylor expansion) (red line)
     # J(new) ≈ J(current) + gamma * directional_derivative
     linear_approx = cost_current + delta_J * steps
-    plt.plot(steps, linear_approx, color='red', linewidth=2.5, linestyle='-', label=r'$J_k + \gamma \cdot \nabla J^T \delta$', alpha=0.8)
+    plt.plot(steps, linear_approx, color='red', linewidth=2.5, linestyle='--', label=r'$J_k + \gamma \cdot \nabla J^T \delta$', alpha=0.8)
     
     # Plot Armijo condition line (green dashed)
     # Armijo accepts if: J(new) < J(current) + c * gamma * directional_derivative
@@ -395,97 +395,103 @@ def newton_Algorithm(x0, x_ref, u_ref, max_iters, tol=1e-6, beta=0.7, c=0.5, gam
 
 # Run Newton newton_Algorithm(x0, x_ref, u_ref, max_iters, tol=1e-6, beta=0.7, c=0.5, gamma_0=1.0)
 # x_opt, u_opt, K_seq, sigma_seq, history = newton_Algorithm(x0, x_ref, u_ref, max_iters=50, tol=1e-6,  beta=0.7, c=0.5, gamma_0=1)
+def generate_report_graphs(t_ref, x_ref, u_ref, x_opt, u_opt, history):
+    
+    if u_ref.shape[0] == len(t_ref):
+        u_ref_plot = u_ref[:-1]
+    else:
+        u_ref_plot = u_ref
+    # 1. Optimal Trajectory and Desired Curve
+    # Visualizes how well the optimized state tracks the reference [cite: 101]
+    plt.figure(figsize=(10, 8))
+    plt.subplot(2, 1, 1)
+    plt.plot(t_ref, x_opt[:, 0], 'b-', linewidth=2, label=r'$\theta_1$ (Optimal)')
+    plt.plot(t_ref, x_opt[:, 1], 'r-', linewidth=2, label=r'$\theta_2$ (Optimal)')
+    plt.plot(t_ref, x_ref[:, 0], 'b--', alpha=0.5, label=r'$\theta_1$ (Desired)')
+    plt.plot(t_ref, x_ref[:, 1], 'r--', alpha=0.5, label=r'$\theta_2$ (Desired)')
+    plt.ylabel('Angles [rad]')
+    plt.title('Optimal Trajectory vs Desired Curve')
+    plt.legend()
+    plt.grid(True, alpha=0.3)
 
-def plot_results(t_ref, x_ref, u_ref, x_opt, u_opt, history):
-    # Print results
-    print("\n--- Optimal Trajectory Results ---")
-    print(f"Final State (x_opt[-1]): {x_opt[-1]}")
-    print(f"Final Input (u_opt[-1]): {u_opt[-1]}")
-    
-    # For plotting controls, use t_ref[:-1] since controls have N-1 elements
-    t_control = t_ref[:-1]
-    
-    # Plot 1: Reference Trajectory
-    plt.figure(figsize=(10,5))
-    plt.subplot(2,1,1)
-    plt.plot(t_ref, x_ref[:,0], label='theta1 (ref)')
-    plt.plot(t_ref, x_ref[:,1], label='theta2 (ref)')
-    plt.ylabel('Angles [rad]'); plt.legend()
-    plt.subplot(2,1,2)
-    plt.plot(t_control, u_ref[:,0], label='tau1 (ref)')
-    plt.plot(t_control, u_ref[:,1], label='tau2 (ref)')
-    plt.xlabel('Time [s]'); plt.ylabel('Torque'); plt.legend()
+    plt.subplot(2, 1, 2)
+    plt.step(t_ref[:-1], u_ref_plot[:, 0], 'g--', alpha=0.5, label=r'$\tau_1$ (Desired)')
+    plt.step(t_ref[:-1], u_ref_plot[:, 1], 'm--', alpha=0.5, label=r'$\tau_2$ (Desired)')
+
+    plt.step(t_ref[:-1], u_opt[:, 0], 'g-', label=r'$\tau_1$ (Optimal)')
+    plt.step(t_ref[:-1], u_opt[:, 1], 'm-', label=r'$\tau_2$ (Optimal)')
+    plt.axhline(0.0, linestyle='--', linewidth=1)
+
+    plt.ylabel('Torque [Nm]')
+    plt.xlabel('Time [s]')
+    plt.legend()
+    plt.grid(True, alpha=0.3)
     plt.tight_layout()
 
-    # Plot 2: Optimal vs. Reference Trajectory
-    plt.figure(figsize=(10,6))
-    plt.subplot(2,1,1)
-    plt.plot(t_ref, x_opt[:,0], label='theta1 (opt)')
-    plt.plot(t_ref, x_opt[:,1], label='theta2 (opt)')
-    plt.plot(t_ref, x_ref[:,0], '--', label='theta1 (ref)')
-    plt.plot(t_ref, x_ref[:,1], '--', label='theta2 (ref)')
-    plt.legend(); plt.ylabel('Angles [rad]')
-
-    plt.subplot(2,1,2)
-    plt.plot(t_control, u_opt[:,0], label='tau1 (opt)')
-    plt.plot(t_control, u_opt[:,1], label='tau2 (opt)')
-    plt.plot(t_control, u_ref[:,0], '--', label='tau1 (ref)')
-    plt.plot(t_control, u_ref[:,1], '--', label='tau2 (ref)')
-    plt.legend(); plt.xlabel('Time [s]'); plt.ylabel('Torque')
-    plt.tight_layout()
-    
-    plt.savefig("figures/acrobot_traj.png") 
-    
-    plt.figure(figsize=(12, 5))
-    plt.subplot(1, 2, 1)
-    plt.semilogy(history['cost'], 'b-o')
-    plt.title('Cost along iterations')
-    plt.xlabel('Iteration'); plt.grid(True, which="both")
-
-    plt.subplot(1, 2, 2)
-    plt.semilogy(history['sigma_norm'], 'r-o')
-    plt.title('Norm of descent direction ($||\sigma||_\infty$)')
-    plt.xlabel('Iteration'); plt.grid(True, which="both")
-    
-    plt.figure(figsize=(10, 4))
-    for i, x_h in enumerate(history['x_trajs']):
-        if i % 5 == 0 or i in [1, 2] or i == len(history['x_trajs'])-1:
-            plt.plot(t_ref, x_h[:, 0], alpha=0.3, label=f'Iter {i}')
+    # 2. Intermediate Trajectories
+    # Shows the evolution from initial guess to convergence [cite: 127]
+    plt.figure(figsize=(10, 7))
+    iters_to_show = [0, 1, 2, 5, 10, len(history['x_trajs']) - 1]
+    iters_to_show = [i for i in iters_to_show if 0 <= i < len(history['x_trajs'])]
+   
+    # θ1
+    plt.subplot(2, 1, 1)
+    for i in iters_to_show:
+        plt.plot(t_ref, history['x_trajs'][i][:, 0], alpha=0.35, label=f'Iter {i}')
     plt.plot(t_ref, x_ref[:, 0], 'k--', linewidth=2, label='Desired')
-    plt.title('Evolution of $\ theta_1$ Trajectory')
-    plt.legend(); plt.ylabel('Angle [rad]'); plt.xlabel('Time [s]')
+    plt.title('Intermediate Trajectories vs Desired (Angles)')
+    plt.ylabel(r'$\theta_1$ [rad]')
+    plt.grid(True, alpha=0.3)
+    plt.legend(ncol=3, fontsize=9)
 
-    plt.figure(figsize=(10, 6))
-    # Plot specific iterations to see the 'shrinking' effect
-    iters_to_plot = [0, 1, 2, 4] 
-    colors = plt.cm.viridis(np.linspace(0, 1, len(iters_to_plot)))
+    # θ2
+    plt.subplot(2, 1, 2)
+    for i in iters_to_show:
+        plt.plot(t_ref, history['x_trajs'][i][:, 1], alpha=0.35, label=f'Iter {i}')
+    plt.plot(t_ref, x_ref[:, 1], 'k--', linewidth=2, label='Desired')
+    plt.ylabel(r'$\theta_2$ [rad]')
+    plt.xlabel('Time [s]')
+    plt.grid(True, alpha=0.3)
 
-    for idx, i in enumerate(iters_to_plot):
-        if i < len(history['sigmas']):
-            sig = np.array(history['sigmas'][i])
-            plt.plot(t_ref[:-1], sig[:, 0], color=colors[idx], 
-                    label=f'Iteration {i}', alpha=0.8)
+    plt.tight_layout()
+    
+    # 3. Armijo Descent Direction Plot (sigma_t)  --- use tau2 (index 1)
+    plt.figure(figsize=(10, 5))
 
-    plt.title('Evolution of Armijo Descent Direction ($\sigma_t$) for $\ tau_1$')
+    sig_iters = [0, 1, 2, len(history['sigmas']) - 1]
+    sig_iters = [i for i in sig_iters if 0 <= i < len(history['sigmas'])]
+
+    for i in sig_iters:
+        sig = np.vstack(history['sigmas'][i])
+        plt.plot(t_ref[:-1], sig[:, 1], label=f'Iter {i} ($\\sigma_t$ for $\\tau_2$)')
+
+    plt.title(r'Armijo Descent Direction ($\sigma_t$) for $\tau_2$ (initial & final iters)')
     plt.xlabel('Time [s]')
     plt.ylabel('Correction Magnitude')
     plt.legend()
     plt.grid(True, alpha=0.3)
-    plt.show()
-
-    if len(history['sigmas']) > 0:
-        plt.figure(figsize=(10, 4))
-        first_sigma = np.array(history['sigmas'][0])
-        final_sigma = np.array(history['sigmas'][-1])
-        
-        plt.plot(t_ref[:-1], first_sigma[:, 0], label='Initial $\sigma$ (Iter 0)')
-        plt.plot(t_ref[:-1], final_sigma[:, 0], label='Final $\sigma$ (Converged)')
-        plt.title('Descent Direction (Armijo $\sigma$)')
-        plt.legend()
-        plt.ylabel('Control Correction')
-        plt.xlabel('Time [s]')
+    # 4. Convergence Diagnostics (Semi-logarithmic)
+    # Confirms the Armijo step-size selection is reducing cost efficiently [cite: 44, 129]
+    plt.figure(figsize=(12, 5))
     
+    # Cost along iterations
+    plt.subplot(1, 2, 1)
+    plt.semilogy(range(len(history['cost'])), history['cost'], 'b-o', markersize=4)
+    plt.title('Cost along Iterations')
+    plt.xlabel('Iteration')
+    plt.ylabel('Total Cost J (log scale)')
+    plt.grid(True, which="both", alpha=0.3)
 
+    # Norm of descent direction
+    plt.subplot(1, 2, 2)
+    plt.semilogy(range(1, len(history['cost'])), history['sigma_norm'], 'r-o', markersize=4)
+    plt.title('Norm of Descent Direction')
+    plt.xlabel('Iteration')
+    plt.ylabel(r'$||\sigma||_\infty$ (log scale)')
+    plt.grid(True, which="both", alpha=0.3)
+    
+    plt.tight_layout()
+    plt.show()
     
 def get_fully_actuated_ref():
     
