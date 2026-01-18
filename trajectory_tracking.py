@@ -3,10 +3,6 @@ import casadi as ca
 from trajectory_generation import *
 from scipy.linalg import solve_discrete_are
 
-#Regulator Parameters
-# Q_reg = np.diag([100.0, 100.0, 10.0, 10.0])
-# R_Reg = np.diag([1.0, 1.0])
-# Q_T_reg = Q_reg * 2.0 #the final position is twice as important as the intermediate position
 
 
 def solve_mpc_tracking(x0, x_ref, u_ref, T):
@@ -174,6 +170,12 @@ def compute_P_inf(A, B, Q, R):
 
 def solve_LQR_tracking(x_opt, u_opt):
     
+    #Regulator Parameters
+    Q_reg = np.diag([100.0, 100.0, 10.0, 10.0])
+    R_Reg = np.diag([1.0, 1.0])
+    Q_T_reg = Q_reg * 2.0 #the final position is twice as important as the intermediate position
+
+        
     N = x_opt.shape[0]
     
     #Linearize about the optimal trajectory(x_opt, u_opt)
