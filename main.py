@@ -25,6 +25,29 @@ import trajectory_tracking as tt
 # Import the animation function
 from animation import create_and_save_animation
 
+def task_1():
+    T = 10.0
+    
+    # Setup Equilibria and Reference
+    # Using your compute_equilibrium from trajectory_generation.py
+    u_target1 = np.array([0.0, 0.0])
+    u_target2 = np.array([0.5, 0.5])
+    
+    x_e1, u_e1 = tg.compute_equilibrium(u_target1, (0.1, -0.1))
+    x_e2, u_e2 = tg.compute_equilibrium(u_target2, (0.35, -0.35))
+    t_ref, x_ref, u_ref = tg.define_reference_piecewise(T, x_e1, x_e2, u_e1, u_e2)
+
+    # Run the Newton Algorithm
+    x0 = x_e1.copy()
+    x_opt, u_opt, K_seq, sigma_seq, history = tg.newton_Algorithm(
+        x0, x_ref, u_ref, 
+        max_iters=5000, 
+        tol=1e-4, 
+        gamma_0=0.02,
+        plot_armijo_iters=5
+    )
+    
+    tg.generate_report_graphs(t_ref, x_ref, u_ref, x_opt, u_opt, history)
 
 def task_2():
     
@@ -80,7 +103,7 @@ def task_3():
     x_opt, u_opt, t_ref = data["x"], data["u"], data["t"]
     
     
-    x_ref, u_ref = tt.LQR_tracking(x_opt, u_opt)
+    x_track, u_track  = tt.LQR_tracking(x_opt, u_opt, t_ref)
     
     # Print results
     print("\n--- Optimal Trajectory Results ---")
@@ -183,6 +206,6 @@ def plot_tracking(x_ref, u_ref, x_opt, u_opt, t_ref, name="figures/unnamed"):
 
 if __name__ == '__main__':
     
-    task_4()
+    task_1()
     
    

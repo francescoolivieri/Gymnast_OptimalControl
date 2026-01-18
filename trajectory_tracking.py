@@ -215,7 +215,7 @@ def simulate_tracking(x_opt, u_opt, K_reg, x0_perturbed):
     return x_track, u_track
 
 
-def LQR_tracking(x_opt, u_opt):
+def LQR_tracking(x_opt, u_opt, t_ref):
     
     x0_perturbed = x_opt[0].copy()
     x0_perturbed[0] += 0.2 #0.2 rad perturbation
@@ -235,9 +235,12 @@ def LQR_tracking(x_opt, u_opt):
     plt.xlabel('Time [s]'); plt.ylabel('Rad'); plt.legend()
 
     plt.subplot(1, 2, 2)
-    plt.plot(t_ref[:-1], u_opt[:-1, 0], 'k--', label='Nominal $u$')
-    plt.plot(t_ref[:-1], u_track[:-1, 0], 'g', label='LQR Action')
+    plt.plot(t_ref[:-1], u_opt[:, 0], 'k--', label='Nominal $u$')
+    plt.plot(t_ref[:-1], u_track[:, 1], 'g', label='LQR Action')
     plt.title('Control Action $\\tau_1$')
     plt.xlabel('Time [s]'); plt.ylabel('Torque'); plt.legend()
     plt.tight_layout()
     plt.show()
+    
+    return x_track, u_track
+
