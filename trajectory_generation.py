@@ -420,7 +420,7 @@ def generate_report_graphs(t_ref, x_ref, u_ref, x_opt, u_opt, history):
 
     plt.step(t_ref[:-1], u_opt[:, 0], 'g-', label=r'$\tau_1$ (Optimal)')
     plt.step(t_ref[:-1], u_opt[:, 1], 'm-', label=r'$\tau_2$ (Optimal)')
-    plt.axhline(0.0, linestyle='--', linewidth=1)
+    plt.axhline(0.0, color='k', linestyle='--', linewidth=1, alpha=0.6)
 
     plt.ylabel('Torque [Nm]')
     plt.xlabel('Time [s]')
