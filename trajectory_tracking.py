@@ -7,7 +7,7 @@ from scipy.linalg import solve_discrete_are
 
 def solve_mpc_tracking(x0, x_ref, u_ref, T):
     
-    T_hor = 100
+    T_hor = 30
     dt = 2e-2
     N = x_ref.shape[0]
     
@@ -85,7 +85,7 @@ def solver_mpc(x0, A_list, B_list, Q, R, Q_T, T_pred, u_ref = None):
       
     cost = 0
     
-    test_constraints = True
+    test_constraints = False
     
     if u_ref is not None and test_constraints:
         U_ref = ca.DM(u_ref).T

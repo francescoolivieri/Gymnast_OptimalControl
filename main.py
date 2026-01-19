@@ -151,7 +151,7 @@ def task_4():
     data = np.load("trajectories_npz/acrobot_optimal_trajectory.npz")
     x_ref, u_ref, t_ref = data["x"], data["u"], data["t"]
     
-    test_disturbances = [0.2, 0.3]
+    test_disturbances = [0.1, 0.3]
     
     # Actual initial state from the reference trajectory
     x0 = x_ref[0].copy()
@@ -178,19 +178,26 @@ def plot_tracking(x_ref, u_ref, x_opt, u_opt, t_ref, name="figures/unnamed"):
     # Trajectory tracking
     plt.figure(figsize=(20,10))
     plt.subplot(2,1,1)
-    plt.plot(t_ref, x_opt[:,0], label='theta1 (opt)')
-    plt.plot(t_ref, x_opt[:,1], label='theta2 (opt)')
-    plt.plot(t_ref, x_ref[:,0], '--', label='theta1 (ref)')
-    plt.plot(t_ref, x_ref[:,1], '--', label='theta2 (ref)')
-    plt.legend(); plt.ylabel('Angles [rad]')
+    # Plot velocities 
+    plt.plot(t_ref, x_opt[:,2], label='theta1 vel (opt)', linewidth=1.25, alpha=0.4, zorder=1)
+    plt.plot(t_ref, x_opt[:,3], label='theta2 vel (opt)', linewidth=1.25, alpha=0.4,  zorder=1)
+    plt.plot(t_ref, x_ref[:,2], '--', label='theta1 vel (ref)', linewidth=1.25, alpha=0.4, zorder=1)
+    plt.plot(t_ref, x_ref[:,3], '--', label='theta2 vel (ref)', linewidth=1.25, alpha=0.4,  zorder=1)
+    
+    # Plot theta1 and theta2 with prominent styling (higher z-order, brighter colors, thicker lines)
+    plt.plot(t_ref, x_opt[:,0], label='theta1 (opt)', linewidth=2., alpha=0.9, zorder=3)
+    plt.plot(t_ref, x_opt[:,1], label='theta2 (opt)', linewidth=2.,  alpha=0.9, zorder=3)
+    plt.plot(t_ref, x_ref[:,0], '--', label='theta1 (ref)', linewidth=2.,  alpha=0.7, zorder=2)
+    plt.plot(t_ref, x_ref[:,1], '--', label='theta2 (ref)', linewidth=2.,  alpha=0.7, zorder=2)
+    plt.legend(); plt.grid(True, alpha=0.3); plt.ylabel('Angles [rad]')
 
     plt.subplot(2,1,2)
-    plt.plot(t_control, u_opt[:,0], label='tau1 (opt)')
-    plt.plot(t_control, u_opt[:,1], label='tau2 (opt)')
-    plt.plot(t_control, u_ref[:,0], '--', label='tau1 (ref)')
-    plt.plot(t_control, u_ref[:,1], '--', label='tau2 (ref)')
-    plt.legend(); plt.xlabel('Time [s]'); plt.ylabel('Torque')
-    plt.tight_layout()
+    plt.plot(t_control, u_opt[:,0], label='tau1 (opt)', linewidth=2.)
+    plt.plot(t_control, u_opt[:,1], label='tau2 (opt)', linewidth=2.)
+    plt.plot(t_control, u_ref[:,0], '--', label='tau1 (ref)', linewidth=2.)
+    plt.plot(t_control, u_ref[:,1], '--', label='tau2 (ref)', linewidth=2.)
+    plt.legend(); plt.grid(True, alpha=0.3); plt.xlabel('Time [s]'); plt.ylabel('Torque')
+  
     plt.savefig(name + "_ref.png")
     
     # Norm error
@@ -198,7 +205,7 @@ def plot_tracking(x_ref, u_ref, x_opt, u_opt, t_ref, name="figures/unnamed"):
     plt.plot(t_ref, np.linalg.norm(x_opt - x_ref, axis=1), label='State error (norm)')
     control_error_padded = np.append(np.abs(u_opt[:, 1] - u_ref[:,1]), np.nan)
     plt.plot(t_ref, control_error_padded, label='Control error (norm)')
-    plt.xlabel('Time [s]'); plt.ylabel('Error Magnitude'); plt.legend()
+    plt.xlabel('Time [s]'); plt.grid(True, alpha=0.3); plt.ylabel('Error Magnitude'); plt.legend()
     
     plt.savefig(name + "_err.png")
     plt.show()
@@ -206,6 +213,6 @@ def plot_tracking(x_ref, u_ref, x_opt, u_opt, t_ref, name="figures/unnamed"):
 
 if __name__ == '__main__':
     
-    task_1()
+    task_4()
     
    

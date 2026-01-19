@@ -13,9 +13,14 @@ nx = 4 #Dimension of state vector
 
 #   Cost Weights
 # Relaxed for tracking fully actuated reference with underactuated acrobot
-Q = np.diag([130.0, 30.0, 0.0001 , 0.0001])  
-R = np.diag([1e-6, 1.5])                  
-Q_T = np.diag([130, 130., 1., 1.0])  
+# Q = np.diag([130.0, 30.0, 0.0001 , 0.0001])  
+# R = np.diag([1e-6, 1.5])                  
+# Q_T = np.diag([130, 130., 1., 1.0])  
+
+Q = np.diag([10.0, 10.0, 0.0001 , 0.0001])  
+R = np.diag([1e-6, 0.01])                  
+Q_T = np.diag([20, 20., 1., 1.0])  
+
 
 def compute_equilibrium(u_target, theta_guess):
     #Equation yields G(theta1, theta2) = u_target
@@ -402,7 +407,7 @@ def generate_report_graphs(t_ref, x_ref, u_ref, x_opt, u_opt, history):
     else:
         u_ref_plot = u_ref
     # 1. Optimal Trajectory and Desired Curve
-    # Visualizes how well the optimized state tracks the reference [cite: 101]
+    # Visualizes how well the optimized state tracks the reference 
     plt.figure(figsize=(10, 8))
     plt.subplot(2, 1, 1)
     plt.plot(t_ref, x_opt[:, 0], 'b-', linewidth=2, label=r'$\theta_1$ (Optimal)')
@@ -431,8 +436,16 @@ def generate_report_graphs(t_ref, x_ref, u_ref, x_opt, u_opt, history):
     # 2. Intermediate Trajectories
     # Shows the evolution from initial guess to convergence [cite: 127]
     plt.figure(figsize=(10, 7))
-    iters_to_show = [0, 1, 2, 5, 10, len(history['x_trajs']) - 1]
-    iters_to_show = [i for i in iters_to_show if 0 <= i < len(history['x_trajs'])]
+    num_iters = len(history['x_trajs'])
+    
+    # Iterations to show
+    iters_to_show = [0, 1, 5, 10, 100]
+    iters_to_show = [i for i in iters_to_show if 0 <= i < num_iters]
+    # Add evenly spaced iterations 
+    num_evenly_spaced = 5
+    evenly_spaced = np.linspace(0, num_iters - 1, num_evenly_spaced, dtype=int).tolist()
+    # Combine and remove duplicates while preserving order
+    iters_to_show = sorted(list(set(iters_to_show + evenly_spaced)))
    
     # θ1
     plt.subplot(2, 1, 1)
