@@ -100,50 +100,24 @@ def task_2():
 def task_3():
     
     data = np.load("trajectories_npz/acrobot_optimal_trajectory.npz")
-    x_opt, u_opt, t_ref = data["x"], data["u"], data["t"]
+    x_ref, u_ref, t_ref = data["x"], data["u"], data["t"] 
     
-    
-    x_track, u_track  = tt.LQR_tracking(x_opt, u_opt, t_ref)
-    
-    # Print results
-    print("\n--- Optimal Trajectory Results ---")
-    print(f"Final State (x_opt[-1]): {x_opt[-1]}")
-    print(f"Final Input (u_opt[-1]): {u_opt[-1]}")
-    
-    # For plotting controls, use t_ref[:-1] since controls have N-1 elements
-    t_control = t_ref[:-1]
-    
-    # Plot 1: Reference Trajectory
-    plt.figure(figsize=(10,5))
-    plt.subplot(2,1,1)
-    plt.plot(t_ref, x_ref[:,0], label='theta1 (ref)')
-    plt.plot(t_ref, x_ref[:,1], label='theta2 (ref)')
-    plt.ylabel('Angles [rad]'); plt.legend()
-    plt.subplot(2,1,2)
-    plt.plot(t_control, u_ref[:,0], label='tau1 (ref)')
-    plt.plot(t_control, u_ref[:,1], label='tau2 (ref)')
-    plt.xlabel('Time [s]'); plt.ylabel('Torque'); plt.legend()
-    plt.tight_layout()
+    test_disturbances = [0.2, 0.3]
 
-    # Plot 2: Optimal vs. Reference Trajectory
-    plt.figure(figsize=(10,6))
-    plt.subplot(2,1,1)
-    plt.plot(t_ref, x_opt[:,0], label='theta1 (opt)')
-    plt.plot(t_ref, x_opt[:,1], label='theta2 (opt)')
-    plt.plot(t_ref, x_ref[:,0], '--', label='theta1 (ref)')
-    plt.plot(t_ref, x_ref[:,1], '--', label='theta2 (ref)')
-    plt.legend(); plt.ylabel('Angles [rad]')
+    # Actual initial state from the reference trajectory
+    x0 = x_ref[0].copy()
+        
+    for disturbance in test_disturbances:
+        x0_test = x0 + disturbance
+        
+        x_track, u_track = tt.LQR_tracking(x_ref, u_ref, t_ref, x0_perturbed=x0_test)
+        
+        # Print results
+        print("\n--- Optimal Trajectory Results ---")
+        print(f"Final State (x_opt[-1]): {x_track[-1]}")
+        print(f"Final Input (u_opt[-1]): {u_track[-1]}")
 
-    plt.subplot(2,1,2)
-    plt.plot(t_control, u_opt[:,0], label='tau1 (opt)')
-    plt.plot(t_control, u_opt[:,1], label='tau2 (opt)')
-    plt.plot(t_control, u_ref[:,0], '--', label='tau1 (ref)')
-    plt.plot(t_control, u_ref[:,1], '--', label='tau2 (ref)')
-    plt.legend(); plt.xlabel('Time [s]'); plt.ylabel('Torque')
-    plt.tight_layout()
-    
-    return
-
+        plot_tracking(x_ref, u_ref, x_track, u_track, t_ref, f"figures/LQR/tracking_dx_{disturbance}")  
 
 
 def task_4():
@@ -214,5 +188,6 @@ def plot_tracking(x_ref, u_ref, x_opt, u_opt, t_ref, name="figures/unnamed"):
 if __name__ == '__main__':
     
     task_4()
+    task_3()
     
    
