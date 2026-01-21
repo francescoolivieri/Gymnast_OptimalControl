@@ -7,7 +7,7 @@ from scipy.linalg import solve_discrete_are
 
 def solve_mpc_tracking(x0, x_ref, u_ref, T):
     
-    T_hor = 75
+    T_pred = 75
     dt = 2e-2
     N = x_ref.shape[0]
     
@@ -22,8 +22,7 @@ def solve_mpc_tracking(x0, x_ref, u_ref, T):
         A_list.append(Ad)
         B_list.append(Bd)
     
-    x_mpc = np.zeros((ns, T_hor, T))
-    #u_mpc = np.zeros((nu, T_hor, T))
+    x_mpc = np.zeros((ns, T_pred, T))
         
     x_real = np.zeros(x_ref.shape)    
     u_real = np.zeros(u_ref.shape)
@@ -45,10 +44,10 @@ def solve_mpc_tracking(x0, x_ref, u_ref, T):
         
         # Note: use sliding window no padding so index 0 is always the current reference at time t.
         x_t_mpc = x_real[t, :] - x_ref[0, :]
-        u_ref_horizon = u_ref[:T_hor]
+        u_ref_horizon = u_ref[:T_pred]
         
         # Solve MPC at
-        u_t_mpc, x_tracked, u_tracked = solver_mpc(x_t_mpc, A_list[:T_hor], B_list[:T_hor], Q, R, Q_T, T_hor, u_ref_horizon)
+        u_t_mpc, x_tracked, u_tracked = solver_mpc(x_t_mpc, A_list[:T_pred], B_list[:T_pred], Q, R, Q_T, T_pred, u_ref_horizon)
         
         # Apply correction around the current feedforward input
         u_real[t, :] = u_ref[0, :] + u_t_mpc
