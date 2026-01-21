@@ -216,32 +216,35 @@ def simulate_tracking(x_opt, u_opt, K_reg, x0_perturbed):
     return x_track, u_track
 
 
-def LQR_tracking(x_opt, u_opt, t_ref):
+def LQR_tracking(x_ref, u_ref, t_ref, x0_perturbed=None):
     
-    x0_perturbed = x_opt[0].copy()
-    x0_perturbed[0] += 0.2 #0.2 rad perturbation
+    if x0_perturbed is None:
+        x0_perturbed = x_ref[0].copy()
 
     #Compute LQR gains -> step 1 and 2 of the slides
-    K_reg_seq = solve_LQR_tracking(x_opt, u_opt)
+    K_reg_seq = solve_LQR_tracking(x_ref, u_ref)
 
     #Simulate -> Step 3 of slides
-    x_track, u_track = simulate_tracking(x_opt, u_opt, K_reg_seq, x0_perturbed)
+    x_track, u_track = simulate_tracking(x_ref, u_ref, K_reg_seq, x0_perturbed)
 
     # --- Plotting Tracking Performance ---
+    '''
     plt.figure(figsize=(12, 5))
     plt.subplot(1, 2, 1)
+
     plt.plot(t_ref, x_opt[:, 0], 'k--', label='Reference (Optimal)')
     plt.plot(t_ref, x_track[:, 0], 'r', label='LQR Tracking')
     plt.title('Angle $\\theta_1$ Tracking with Perturbation')
     plt.xlabel('Time [s]'); plt.ylabel('Rad'); plt.legend()
 
     plt.subplot(1, 2, 2)
-    plt.plot(t_ref[:-1], u_opt[:, 0], 'k--', label='Nominal $u$')
-    plt.plot(t_ref[:-1], u_track[:, 1], 'g', label='LQR Action')
-    plt.title('Control Action $\\tau_1$')
+    plt.plot(t_ref[:-1], u_opt[:, 1], 'k--', label=r'Nominal $\tau_2$')
+    plt.plot(t_ref[:-1], u_track[:, 1], 'm', label=r'Tracked $\tau_2$')
+    plt.title(r'Control Action $\tau_2$')
     plt.xlabel('Time [s]'); plt.ylabel('Torque'); plt.legend()
     plt.tight_layout()
     plt.show()
+    '''
     
     return x_track, u_track
 

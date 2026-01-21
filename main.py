@@ -100,23 +100,24 @@ def task_2():
 def task_3():
     
     data = np.load("trajectories_npz/acrobot_optimal_trajectory.npz")
-    x_ref, u_ref, t_ref = data["x"], data["u"], data["t"]
+    x_ref, u_ref, t_ref = data["x"], data["u"], data["t"] 
     
-    
-    x_track, u_track  = tt.LQR_tracking(x_opt, u_opt, t_ref)
-    
-    # Print results
-    print("\n--- Optimal Trajectory Results ---")
-    print(f"Final State (x_opt[-1]): {x_opt[-1]}")
-    print(f"Final Input (u_opt[-1]): {u_opt[-1]}")
-    
-    # For plotting controls, use t_ref[:-1] since controls have N-1 elements
-    t_control = t_ref[:-1]
-    
-    plot_tracking(x_ref, u_ref, x_track, u_track, t_ref, "figures/lqr/tracking_dx")
-    
-    return
+    test_disturbances = [0.2, 0.3]
 
+    # Actual initial state from the reference trajectory
+    x0 = x_ref[0].copy()
+        
+    for disturbance in test_disturbances:
+        x0_test = x0 + disturbance
+        
+        x_track, u_track = tt.LQR_tracking(x_ref, u_ref, t_ref, x0_perturbed=x0_test)
+        
+        # Print results
+        print("\n--- Optimal Trajectory Results ---")
+        print(f"Final State (x_opt[-1]): {x_track[-1]}")
+        print(f"Final Input (u_opt[-1]): {u_track[-1]}")
+
+        plot_tracking(x_ref, u_ref, x_track, u_track, t_ref, f"figures/LQR/tracking_dx_{disturbance}")  
 
 
 def task_4():
@@ -187,6 +188,7 @@ def plot_tracking(x_ref, u_ref, x_opt, u_opt, t_ref, name="figures/unnamed"):
 
 if __name__ == '__main__':
     
-    task_2()
+    task_4()
+    task_3()
     
    
