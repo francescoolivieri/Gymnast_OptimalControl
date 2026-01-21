@@ -43,7 +43,7 @@ def task_1():
         x0, x_ref, u_ref, 
         max_iters=5000, 
         tol=1e-4, 
-        gamma_0=0.02,
+        gamma_0=0.05,
         plot_armijo_iters=5
     )
     
@@ -66,8 +66,8 @@ def task_2():
         x0, x_ref, u_ref, 
         max_iters=5000, 
         tol=1e-4, 
-        gamma_0=0.02,
-        plot_armijo_iters=5
+        gamma_0=0.1,
+        plot_armijo_iters=7
     )
     
     # Save trajectory for later use
@@ -79,7 +79,7 @@ def task_2():
     )
     
     print("Generating trajectory plots...")
-    tg.plot_results(t_ref, x_ref, u_ref, x_opt, u_opt, history)
+    tg.generate_report_graphs(t_ref, x_ref, u_ref, x_opt, u_opt, history)
     
     print("Generating animation...")    
     create_and_save_animation(
@@ -100,7 +100,7 @@ def task_2():
 def task_3():
     
     data = np.load("trajectories_npz/acrobot_optimal_trajectory.npz")
-    x_opt, u_opt, t_ref = data["x"], data["u"], data["t"]
+    x_ref, u_ref, t_ref = data["x"], data["u"], data["t"]
     
     
     x_track, u_track  = tt.LQR_tracking(x_opt, u_opt, t_ref)
@@ -113,34 +113,7 @@ def task_3():
     # For plotting controls, use t_ref[:-1] since controls have N-1 elements
     t_control = t_ref[:-1]
     
-    # Plot 1: Reference Trajectory
-    plt.figure(figsize=(10,5))
-    plt.subplot(2,1,1)
-    plt.plot(t_ref, x_ref[:,0], label='theta1 (ref)')
-    plt.plot(t_ref, x_ref[:,1], label='theta2 (ref)')
-    plt.ylabel('Angles [rad]'); plt.legend()
-    plt.subplot(2,1,2)
-    plt.plot(t_control, u_ref[:,0], label='tau1 (ref)')
-    plt.plot(t_control, u_ref[:,1], label='tau2 (ref)')
-    plt.xlabel('Time [s]'); plt.ylabel('Torque'); plt.legend()
-    plt.tight_layout()
-
-    # Plot 2: Optimal vs. Reference Trajectory
-    plt.figure(figsize=(10,6))
-    plt.subplot(2,1,1)
-    plt.plot(t_ref, x_opt[:,0], label='theta1 (opt)')
-    plt.plot(t_ref, x_opt[:,1], label='theta2 (opt)')
-    plt.plot(t_ref, x_ref[:,0], '--', label='theta1 (ref)')
-    plt.plot(t_ref, x_ref[:,1], '--', label='theta2 (ref)')
-    plt.legend(); plt.ylabel('Angles [rad]')
-
-    plt.subplot(2,1,2)
-    plt.plot(t_control, u_opt[:,0], label='tau1 (opt)')
-    plt.plot(t_control, u_opt[:,1], label='tau2 (opt)')
-    plt.plot(t_control, u_ref[:,0], '--', label='tau1 (ref)')
-    plt.plot(t_control, u_ref[:,1], '--', label='tau2 (ref)')
-    plt.legend(); plt.xlabel('Time [s]'); plt.ylabel('Torque')
-    plt.tight_layout()
+    plot_tracking(x_ref, u_ref, x_track, u_track, t_ref, "figures/lqr/tracking_dx")
     
     return
 
@@ -151,7 +124,7 @@ def task_4():
     data = np.load("trajectories_npz/acrobot_optimal_trajectory.npz")
     x_ref, u_ref, t_ref = data["x"], data["u"], data["t"]
     
-    test_disturbances = [0.1, 0.3]
+    test_disturbances = [0.1]
     
     # Actual initial state from the reference trajectory
     x0 = x_ref[0].copy()
@@ -189,7 +162,7 @@ def plot_tracking(x_ref, u_ref, x_opt, u_opt, t_ref, name="figures/unnamed"):
     plt.plot(t_ref, x_opt[:,1], label='theta2 (opt)', linewidth=2.,  alpha=0.9, zorder=3)
     plt.plot(t_ref, x_ref[:,0], '--', label='theta1 (ref)', linewidth=2.,  alpha=0.7, zorder=2)
     plt.plot(t_ref, x_ref[:,1], '--', label='theta2 (ref)', linewidth=2.,  alpha=0.7, zorder=2)
-    plt.legend(); plt.grid(True, alpha=0.3); plt.ylabel('Angles [rad]')
+    plt.legend(); plt.grid(True, alpha=0.3); plt.ylabel('Angles [rad]'); plt.tight_layout()
 
     plt.subplot(2,1,2)
     plt.plot(t_control, u_opt[:,0], label='tau1 (opt)', linewidth=2.)
@@ -197,7 +170,8 @@ def plot_tracking(x_ref, u_ref, x_opt, u_opt, t_ref, name="figures/unnamed"):
     plt.plot(t_control, u_ref[:,0], '--', label='tau1 (ref)', linewidth=2.)
     plt.plot(t_control, u_ref[:,1], '--', label='tau2 (ref)', linewidth=2.)
     plt.legend(); plt.grid(True, alpha=0.3); plt.xlabel('Time [s]'); plt.ylabel('Torque')
-  
+    plt.tight_layout()
+    
     plt.savefig(name + "_ref.png")
     
     # Norm error
@@ -206,13 +180,13 @@ def plot_tracking(x_ref, u_ref, x_opt, u_opt, t_ref, name="figures/unnamed"):
     control_error_padded = np.append(np.abs(u_opt[:, 1] - u_ref[:,1]), np.nan)
     plt.plot(t_ref, control_error_padded, label='Control error (norm)')
     plt.xlabel('Time [s]'); plt.grid(True, alpha=0.3); plt.ylabel('Error Magnitude'); plt.legend()
-    
+    plt.tight_layout()
     plt.savefig(name + "_err.png")
     plt.show()
 
 
 if __name__ == '__main__':
     
-    task_4()
+    task_2()
     
    

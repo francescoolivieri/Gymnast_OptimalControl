@@ -13,13 +13,10 @@ nx = 4 #Dimension of state vector
 
 #   Cost Weights
 # Relaxed for tracking fully actuated reference with underactuated acrobot
-# Q = np.diag([130.0, 30.0, 0.0001 , 0.0001])  
-# R = np.diag([1e-6, 1.5])                  
-# Q_T = np.diag([130, 130., 1., 1.0])  
-
-Q = np.diag([10.0, 10.0, 0.0001 , 0.0001])  
-R = np.diag([1e-6, 0.01])                  
-Q_T = np.diag([20, 20., 1., 1.0])  
+Q = np.diag([130.0, 30.0, 0.0001 , 0.0001])  
+R = np.diag([1e-6, 1.5])                  
+Q_T = np.diag([130, 130., 1., 1.0])  
+ 
 
 
 def compute_equilibrium(u_target, theta_guess):
@@ -376,7 +373,12 @@ def newton_Algorithm(x0, x_ref, u_ref, max_iters, tol=1e-6, beta=0.7, c=0.5, gam
             plot_armijo_line_search(k, x_traj, u_traj, K, sigma, cost_k, 
                                    x_ref, u_ref, delta_J, gamma_i, 
                                    stepsizes_tested, costs_tested, c, beta)
-            
+        
+        if k == 1000:
+            plot_armijo_line_search(k, x_traj, u_traj, K, sigma, cost_k, 
+                                   x_ref, u_ref, delta_J, gamma_i, 
+                                   stepsizes_tested, costs_tested, c, beta)
+        
         # Convergence check
         cost_reduction = cost_k - cost_new
         x_traj, u_traj, cost_k = x_new, u_new, cost_new

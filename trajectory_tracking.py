@@ -7,7 +7,7 @@ from scipy.linalg import solve_discrete_are
 
 def solve_mpc_tracking(x0, x_ref, u_ref, T):
     
-    T_hor = 30
+    T_hor = 75
     dt = 2e-2
     N = x_ref.shape[0]
     
