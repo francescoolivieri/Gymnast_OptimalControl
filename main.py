@@ -46,8 +46,8 @@ def task_1():
         gamma_0=0.05,
         plot_armijo_iters=5
     )
-    
-    tg.generate_report_graphs(t_ref, x_ref, u_ref, x_opt, u_opt, history)
+    tg.plot_results(t_ref, x_ref, u_ref, x_opt, u_opt, history)
+    #tg.generate_report_graphs(t_ref, x_ref, u_ref, x_opt, u_opt, history)
 
 def task_2():
     
@@ -90,7 +90,6 @@ def task_2():
         x_e2=x_ref[-1],    # Final state
         filename='figures/acrobot_swingup_newton_algorithm.gif'
     )
-    
     
     #Show all figures (Plots and Animation Window)
     print("\nDisplaying all results. Close the windows to finish the script.")
@@ -188,7 +187,6 @@ def plot_tracking(x_ref, u_ref, x_opt, u_opt, t_ref, name="figures/unnamed"):
 
 if __name__ == '__main__':
     
-    task_4()
-    task_3()
+    task_1()
     
    
